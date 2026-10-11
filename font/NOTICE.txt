@@ -1,0 +1,15 @@
+Koruri-Bold.ttf
+
+Koruri (version 20210720)
+https://koruri.github.io
+
+Copyright notices (from the font file):
+
+  Koruri: Copyright (c) 2013- lindwurm.
+  Open Sans: Copyright (c) 2011 Google Corporation.
+  Roboto: Copyright (c) 2012- Google.
+  M+ OUTLINE FONTS: Copyright (C) 2002- M+ FONTS PROJECT.
+
+This font is distributed under the Apache License, Version 2.0.
+See the LICENSE file in this folder for the full license text.
+The font file is included without modification.

@@ -1,0 +1,2811 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>冒険マップ — じぶんだけのゲームをつくろう</title>
+<link rel="icon" type="image/png" href="image/favicon.png">
+<style>
+  @font-face{
+    font-family:"Koruri";
+    src:url("font/Koruri-Bold.ttf") format("truetype");
+    font-weight:100 900;
+    font-style:normal;
+    font-display:swap;
+  }
+  :root{
+    --ink:#1f3d2b;
+    --ink-soft:#4d6b57;
+    --sky:#8fd3ff;
+    --hill:#6fce7b;
+    --hill-2:#3fa35a;
+    --sand:#f4d35e;
+    --wood:#c9842a;
+    --wood-dark:#7a4a12;
+    --paper:#fff8e4;
+    --paper-dim:#4d6b57;
+    --coral:#c2410c;
+    --bg-deep:#8fd3ff;
+    --mono:"Koruri","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
+    --sans:"Koruri","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
+    /* 画面に合わせた縮小率（JSの applyScale で決める）。フレームは 1430×810 */
+    --s:1;
+    --stage-w:1430px;
+    --stage-h:810px;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;
+    background:#7ecb4a;
+    color:#ffffff;
+    font-family:var(--sans);
+    font-weight:700;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* 背景はスタートと同じ絵を使い、質問の画面ではCSSでぼかす（前のぼかした絵と同じくらいの blur 10px）。
+     切りかわるときは、ぼけていく動きで見せる */
+  body::before{
+    content:"";
+    position:fixed;
+    inset:-40px;
+    z-index:0;
+    pointer-events:none;
+    background:url("image/top/bg_mv_01.png") center center / auto no-repeat;
+    filter:blur(0);
+    transition:filter .6s ease;
+    will-change:filter;
+  }
+  body:not(.on-start)::before{ filter:blur(10px); }
+  @media (prefers-reduced-motion: reduce){
+    body::before{ transition:none; }
+  }
+
+  .snap-container{
+    height:100vh; height:100dvh;
+    overflow-y:scroll;
+    scroll-snap-type:y mandatory;
+    scroll-behavior:smooth;
+    position:relative; z-index:2;
+  }
+  /* 離れた番号へ飛ぶとき：いまのページは進む向きと反対へ抜けていき、行き先のページは進む向きから入ってくる
+     （先へ進むときは 上へ抜けて下から入る。前へ戻るときは 下へ抜けて上から入る） */
+  .jump-leave{ animation:jump-leave .22s cubic-bezier(.5,0,.8,.4) both; }
+  @keyframes jump-leave{
+    to{ translate:0 var(--jump-to, -140px); opacity:0; }
+  }
+  .jump-in{ animation:jump-in .45s cubic-bezier(.2,.8,.3,1) both; }
+  @keyframes jump-in{
+    from{ translate:0 var(--jump-from, 140px); opacity:0; }
+    to{ translate:0 0; opacity:1; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .jump-leave, .jump-in{ animation:none; }
+  }
+  .section{
+    height:100vh; height:100dvh;
+    scroll-snap-align:start;
+    scroll-snap-stop:always;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:calc(150px * var(--s)) 20px calc(36px * var(--s));
+    position:relative;
+  }
+
+  .map-path{
+    position:fixed;
+    top:calc(12px * var(--s)); left:50%;
+    transform:translateX(-50%) scale(var(--s));
+    transform-origin:top center;
+    width:max-content;
+    height:130px;
+    z-index:50;
+  }
+  .map-track{
+    position:absolute;
+    left:32px; right:54px; top:50%;
+    height:0;
+    border:0;
+    border-top:4px dotted #a36000;
+    background:none;
+    overflow:visible;
+    z-index:0;
+  }
+  .progress-fill{ display:none; }
+  .dots{
+    position:relative;
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:36px;
+    background:none;
+    border:none;
+    padding:0;
+    overflow:visible;
+  }
+  .dots span{
+    flex:0 0 auto;
+    width:auto; height:auto;
+    background:none;
+    border:0;
+    border-radius:0;
+    box-shadow:none;
+    padding:0;
+    cursor:pointer;
+    position:relative;
+    z-index:1;
+    outline:none;
+  }
+  .dots span.dot-start{ display:none; }
+  .dots span.dot-new{
+    animation:dot-pop .5s cubic-bezier(.3,1.6,.5,1) both;
+    animation-delay:var(--pop-delay, 0s);
+  }
+  @keyframes dot-pop{
+    0%{ transform:scale(0); opacity:0; }
+    60%{ transform:scale(1.25); opacity:1; }
+    100%{ transform:scale(1); opacity:1; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .dots span.dot-new{ animation:none; }
+  }
+  .dots span img{
+    display:block;
+    width:auto;
+    height:auto;
+    max-width:none;
+    max-height:none;
+    pointer-events:none;
+  }
+  .dots span .geo-on{
+    display:none;
+    position:absolute;
+    left:50%; top:50%;
+    transform:translate(-50%, -50%);
+  }
+  .dots span.active{ background:none; outline:none; transform:none; z-index:2; }
+  .dots span.active .geo-off{ visibility:hidden; }
+  .dots span.active .geo-on{ display:block; }
+  .dots span.active .dot-num{ font-size:50px; }
+  .dots span .dot-num{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#fff;
+    font-family:var(--sans);
+    font-size:36px;
+    font-weight:700;
+    line-height:1;
+    pointer-events:none;
+  }
+
+  h1{
+    font-weight:900;
+    font-size:clamp(26px,5.6vw,46px);
+    margin:0 0 12px;
+    color:#ffffff;
+    text-align:center;
+    line-height:1.25;
+    text-shadow:none;
+  }
+  .q-stage{
+    position:relative;
+    flex:0 0 auto;
+    z-index:1;
+    background:url("image/contents/bg_frame.png") left top / auto no-repeat;
+    /* 見た目だけ縮めて、レイアウト上の大きさも負のマージンで合わせる */
+    transform:scale(var(--s));
+    transform-origin:top center;
+    margin:0 calc(var(--stage-w) * (var(--s) - 1) / 2) calc(var(--stage-h) * (var(--s) - 1));
+  }
+  .qtitle, #s-end h1{
+    position:absolute;
+    left:50%;
+    top:130px;
+    transform:translateX(-50%);
+    z-index:2;
+    margin:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+    font-size:40px;
+    font-weight:700;
+    text-align:center;
+    color:#fff;
+    background:url("image/contents/title_frame.png") left top / auto no-repeat;
+  }
+  .qtitle-text{
+    display:block;
+    white-space:nowrap;
+    line-height:1;
+  }
+  #s-end h1{ flex-direction:row; white-space:nowrap; line-height:1; }
+  ruby{
+    position:relative;
+    display:inline-block;
+    line-height:1;
+    vertical-align:baseline;
+  }
+  rt{
+    position:absolute;
+    left:50%;
+    bottom:100%;
+    transform:translateX(-50%);
+    font-size:0.5em;
+    font-weight:700;
+    line-height:1;
+    white-space:nowrap;
+    color:#ffffff;
+    pointer-events:none;
+  }
+  .qsub{
+    /* 狭いので出さない。文はHTMLに残してあるので、出すときはこの行を消す */
+    display:none;
+    max-width:480px;
+    margin:0;
+    color:#fff;
+    font-size:16px;
+    font-weight:700;
+    line-height:1.2;
+    text-align:center;
+  }
+  .lede{
+    max-width:520px;
+    text-align:center;
+    color:#ffffff;
+    font-size:16px;
+    font-weight:700;
+    line-height:1.7;
+    margin-bottom:22px;
+  }
+
+  .chest{ display:none; }
+
+  .options{
+    display:grid;
+    gap:12px 18px;
+    width:auto;
+    max-width:none;
+    position:absolute;
+    left:50%;
+    top:52.2%;
+    transform:translate(-50%, -50%);
+    z-index:2;
+    justify-content:center;
+    justify-items:center;
+    align-items:center;
+  }
+  .section[data-q="genre"] .options,
+  .options.two-cols{
+    grid-template-columns:max-content max-content;
+  }
+  .option{
+    position:relative;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:auto;
+    height:auto;
+    flex:0 0 auto;
+    gap:0;
+    padding:0;
+    border:0;
+    border-radius:0;
+    background:url("image/contents/btn/btn_default.png") left top / auto no-repeat;
+    box-shadow:none;
+    cursor:pointer;
+    color:#fff;
+    font-family:var(--sans);
+    font-weight:700;
+    text-align:center;
+  }
+  .option[hidden]{ display:none !important; }
+  .option:hover,
+  .option:active,
+  .option.selected{
+    transform:none;
+    outline:none;
+    box-shadow:none;
+  }
+  /* タッチ画面ではタップ後に hover の絵が残るので、マウスのときだけ */
+  @media (hover:hover){
+    .option:hover{
+      background-image:url("image/contents/btn/btn_active.png");
+    }
+  }
+  .option.selected,
+  .option:active,
+  .option.selected:hover,
+  .option:active:hover{
+    background-image:url("image/contents/btn/btn_selected.png");
+  }
+  .option .ico, .option .mark{ display:none; }
+  .option .label{
+    position:absolute;
+    inset:0;
+    z-index:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    pointer-events:none;
+    color:#fff;
+    text-align:center;
+    padding:0 18px;
+  }
+  .option .label b{
+    display:block;
+    font-weight:700;
+    font-size:36px;
+    line-height:1;
+    color:#fff;
+  }
+  /* 小さい行があるボタンは、ふりがなまで含めて緑の面（上から10〜86px）に収まるよう少し小さく */
+  .option .label:has(small) b{ font-size:32px; }
+  .option .label small{
+    display:block;
+    color:#fff;
+    font-size:16px;
+    line-height:1;
+    margin-top:10px;
+    font-weight:700;
+    opacity:1;
+  }
+  .option rt{ color:#fff; font-weight:700; }
+
+  .btn{
+    font-family:var(--sans);
+    font-weight:900;
+    font-size:18px;
+    color:#ffffff;
+    border:4px solid var(--ink);
+    border-radius:16px;
+    padding:14px 28px;
+    cursor:pointer;
+    box-shadow:0 6px 0 #c9842a;
+  }
+  @media (hover:hover){
+    .btn:not(.btn-start):hover{ transform:translateY(-1px); }
+  }
+  .btn:disabled{ opacity:.4; cursor:not-allowed; box-shadow:none; transform:none; }
+  #s-end .btn{
+    position:relative;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:auto;
+    height:auto;
+    padding:0;
+    border:0;
+    border-radius:0;
+    box-shadow:none;
+    color:#fff;
+    cursor:pointer;
+  }
+  #s-end .btn-save{
+    background:url("image/contents/btn_treasure/btn_default.png") left top / auto no-repeat;
+  }
+  #s-end .btn-home{
+    background:url("image/contents/btn_treasure/btn_default_small.png") left top / auto no-repeat;
+  }
+  #s-end .btn:hover,
+  #s-end .btn:disabled{
+    box-shadow:none;
+    transform:none;
+  }
+  #s-end .btn-save:active{
+    background-image:url("image/contents/btn_treasure/btn_selected.png");
+  }
+  #s-end .btn-home:active{
+    background-image:url("image/contents/btn_treasure/btn_selected_small.png");
+  }
+  #s-end .end-label{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    pointer-events:none;
+    color:#fff;
+  }
+  #s-end .end-label img{
+    width:auto;
+    height:auto;
+    max-width:none;
+    max-height:none;
+    flex:0 0 auto;
+  }
+  #s-end .btn-save .end-copy{
+    font-size:36px;
+    font-weight:700;
+    line-height:1.1;
+    color:#fff;
+  }
+  #s-end .btn-home .end-copy{
+    font-size:20px;
+    font-weight:700;
+    line-height:1.1;
+    color:#fff;
+  }
+
+  body.on-start .map-path,
+  body.on-start #logpanel{ display:none; }
+  #s-start{
+    gap:calc(28px * var(--s));
+    padding:calc(24px * var(--s)) 20px;
+  }
+  .hero-logo{
+    display:block;
+    width:auto;
+    height:calc(540px * var(--s));
+    max-width:none;
+    max-height:none;
+    flex:0 0 auto;
+  }
+  .btn-start{
+    position:relative;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:auto;
+    height:auto;
+    flex:0 0 auto;
+    padding:0;
+    border:0;
+    border-radius:0;
+    background:url("image/top/btn/btn_default.png") left top / auto no-repeat;
+    box-shadow:none;
+    color:#ffffff;
+    font-size:64px;
+    font-weight:700;
+    line-height:1;
+    text-shadow:0 2px 0 rgba(20,90,0,.28);
+    transform:scale(var(--s));
+    transform-origin:top center;
+    margin:0 calc(610px * (var(--s) - 1) / 2) calc(158px * (var(--s) - 1));
+  }
+  .btn-start span{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    pointer-events:none;
+  }
+  .btn-start rt{ color:#ffffff; font-weight:700; }
+  @media (hover:hover){
+    .btn-start:hover{
+      text-shadow:0 2px 0 rgba(140,20,40,.28);
+      background-image:url("image/top/btn/btn_active.png");
+    }
+  }
+  .btn-start:active{
+    background-image:url("image/top/btn/btn_selected.png");
+  }
+  .badge{
+    font-size:12px;
+    font-weight:900;
+    color:#ffffff;
+    border:2px solid #fff;
+    padding:5px 10px;
+    border-radius:100px;
+  }
+
+  #logpanel{
+    position:fixed;
+    top:calc(12px * var(--s)); right:calc(12px * var(--s));
+    left:auto; bottom:auto;
+    z-index:60;
+    transform:scale(var(--s));
+    transform-origin:top right;
+    width:max-content;
+    background:none;
+    border:0;
+    border-radius:0;
+    font-family:var(--sans);
+  }
+  #logpanel:not(.collapsed){
+    width:var(--fab-w);
+    height:var(--fab-h);
+    background:url("image/contents/bg_FAB.png") left top / auto no-repeat;
+  }
+  #logpanel .logbar{
+    padding:0;
+    background:none;
+    border:0;
+    border-radius:0;
+    cursor:pointer;
+    user-select:none;
+    line-height:0;
+  }
+  #logpanel.collapsed .logbar{ position:static; }
+  #logpanel:not(.collapsed) .logbar{ position:static; }
+  #logpanel:not(.collapsed) .fab-on{
+    position:absolute;
+    top:calc(13% + 8px);
+    right:12%;
+    z-index:3;
+  }
+  #logpanel .fab-off,
+  #logpanel .fab-on{
+    display:block;
+    width:auto;
+    height:auto;
+    max-width:none;
+    max-height:none;
+  }
+  #logpanel.collapsed .fab-on,
+  #logpanel:not(.collapsed) .fab-off{ display:none; }
+  #logtitle{ display:none; }
+  #logpanel:not(.collapsed) #logtitle{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:absolute;
+    left:50%;
+    top:13%;
+    transform:translateX(-50%);
+    margin:0;
+    padding:24px 26px 8px;
+    background:#20b530;
+    border-radius:16px;
+    color:#ffffff;
+    font-size:36px;
+    font-weight:700;
+    line-height:1.1;
+    white-space:nowrap;
+  }
+  #logpanel .dot3{ display:none; }
+  #logbody{
+    display:none;
+    position:absolute;
+    /* 白い紙の内側に収める（スクロールバーが緑の枠に重ならないように） */
+    left:8%; right:9%; top:27%; bottom:8%;
+    padding:0;
+    overflow-y:auto;
+    scrollbar-width:thin;
+    scrollbar-color:#20b530 transparent;
+    font-size:15px;
+    font-weight:700;
+    line-height:1.2;
+    color:#333333;
+    white-space:normal;
+    max-height:none;
+    background:transparent;
+    flex-direction:column;
+    align-items:center;
+    gap:18px;
+    padding-top:10px;
+  }
+  #logpanel:not(.collapsed) #logbody{ display:flex; }
+  #logbody::-webkit-scrollbar{ width:8px; }
+  #logbody::-webkit-scrollbar-track{ background:transparent; }
+  #logbody::-webkit-scrollbar-thumb{ background:#20b530; border-radius:4px; }
+  #logbody .lg-empty{ color:#333333; font-size:19px; font-weight:700; line-height:1.9; text-align:center; }
+  /* いちばん下の行のあとにも、少しスクロールできる余白を作る */
+  #logbody::after{ content:""; flex:0 0 12px; }
+  #logbody .lg-line{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex:0 0 auto;
+    color:#333333;
+    font-size:15px;
+    font-weight:700;
+    white-space:nowrap;
+  }
+  #logbody .lg-name{ flex:0 0 auto; color:#333333; font-size:15px; font-weight:700; }
+  #logbody .lg-dots{
+    flex:1 1 auto;
+    min-width:28px;
+    height:8px;
+    align-self:center;
+    background-image:radial-gradient(circle, #20b530 2.2px, transparent 2.5px);
+    background-size:10px 8px;
+    background-repeat:repeat-x;
+    background-position:left center;
+  }
+  #logbody .lg-line b{
+    flex:0 0 auto;
+    text-align:left;
+    color:#8cd30c;
+    font-size:22px;
+    font-weight:700;
+  }
+  #logbody rt{ color:#333333; }
+  #logbody .lg-line b rt{ color:#8cd30c; }
+  #logbody .cursor{ display:none; }
+
+  #s-end{
+    justify-content:center;
+    padding:calc(150px * var(--s)) 20px calc(36px * var(--s));
+    overflow:clip;   /* 紙ふぶきが画面の外へ出ても、ページが伸びないように */
+  }
+  #s-end h1{ margin-bottom:8px; }
+  #s-end .lede,
+  #s-end textarea{ display:none; }
+  /* 未回答があるときは、宝箱の絵のかわりに未回答の質問を出す */
+  #missing{
+    display:none;
+    width:511px;
+    min-height:360px;
+    flex:0 0 auto;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:22px;
+    padding:28px 24px;
+    background:#ffffff;
+    border:4px solid #f6c9a5;
+    border-radius:24px;
+    color:#7a4a12;
+    text-align:center;
+  }
+  #s-end.has-missing #missing{ display:flex; }
+  #s-end.has-missing .end-chest-wrap{ display:none; }
+  #missing .miss-lead{
+    margin:0;
+    font-size:26px;
+    font-weight:700;
+    line-height:1.9;
+  }
+  #missing rt{ color:#7a4a12; }
+  #missing .miss-list{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:14px 12px;
+  }
+  #missing .miss-chip{
+    font-family:var(--sans);
+    font-size:22px;
+    font-weight:700;
+    line-height:1;
+    color:#ffffff;
+    background:#20b530;
+    border:0;
+    border-radius:999px;
+    padding:18px 22px 12px;
+    cursor:pointer;
+  }
+  #missing .miss-chip rt{ color:#ffffff; }
+  /* ボタンの下に重ねて出す（出ても、ボタンの位置が動かないように） */
+  #saveNote{
+    position:absolute;
+    left:50%; top:100%;
+    transform:translateX(-50%);
+    white-space:nowrap;
+    margin:10px 0 0;
+    color:#7a4a12;
+    font-size:22px;
+    font-weight:700;
+    line-height:1.9;
+    text-align:center;
+  }
+  #saveNote rt{ color:#7a4a12; }
+  .end-found{
+    position:absolute;
+    left:50%;
+    top:52.2%;
+    transform:translate(-50%, -50%);
+    z-index:1;   /* タイトルの板（z-index:2）より後ろ。宝箱の光がタイトルにかからないように */
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:36px;
+  }
+  .end-chest-wrap{
+    position:relative;
+    flex:0 0 auto;
+    line-height:0;
+  }
+  .end-chest{
+    position:relative;
+    z-index:1;
+    width:auto;
+    height:auto;
+    max-width:none;
+    max-height:none;
+  }
+  /* 宝箱を見つけた演出：はねて登場して、後ろで光の輪がゆっくり回る */
+  .end-chest-wrap::before{
+    content:"";
+    position:absolute;
+    left:50%; top:50%;
+    width:880px; height:880px;
+    margin:-440px 0 0 -440px;
+    z-index:0;
+    border-radius:50%;
+    background:repeating-conic-gradient(rgba(255,196,40,.75) 0deg 9deg, rgba(255,196,40,0) 9deg 24deg);
+    -webkit-mask:radial-gradient(circle, #000 30%, transparent 70%);
+    mask:radial-gradient(circle, #000 30%, transparent 70%);
+    opacity:0;
+    pointer-events:none;
+  }
+  #s-end.chest-reveal .end-chest{
+    animation:chest-bounce .9s cubic-bezier(.3,1.4,.5,1) both;
+  }
+  #s-end.chest-reveal .end-chest-wrap::before{
+    animation:rays-in .6s ease-out .55s both, rays-spin 14s linear .55s infinite;
+  }
+  @keyframes chest-bounce{
+    0%{ transform:translateY(140px) scale(.3); opacity:0; }
+    45%{ transform:translateY(-24px) scale(1.08); opacity:1; }
+    62%{ transform:translateY(0) scale(.97) rotate(-4deg); }
+    76%{ transform:rotate(3deg); }
+    88%{ transform:rotate(-1.5deg); }
+    100%{ transform:none; opacity:1; }
+  }
+  @keyframes rays-in{
+    from{ opacity:0; }
+    to{ opacity:1; }
+  }
+  @keyframes rays-spin{
+    to{ rotate:360deg; }
+  }
+  /* 保存したときの紙ふぶき：宝箱の裏から飛び出して、上に上がってから落ちる。
+     宝箱（z-index:1）より後ろ（z-index:0）なので、宝箱の裏から出てくるように見える */
+  .confetti{
+    position:absolute;
+    left:50%; top:35%;
+    z-index:0;
+    pointer-events:none;
+    width:14px; height:20px;
+    border-radius:2px;
+    opacity:0;
+    animation:confetti-burst var(--fall, 2s) linear var(--delay, 0s) forwards;
+  }
+  @keyframes confetti-burst{
+    0%{ transform:translate(-50%, -50%) rotate(0deg); opacity:1; animation-timing-function:cubic-bezier(.15,.7,.35,1); }
+    38%{ transform:translate(-50%, -50%) translate(var(--x1), var(--y1)) rotate(calc(var(--spin) * .4)); opacity:1; animation-timing-function:cubic-bezier(.55,0,.9,.55); }
+    85%{ opacity:1; }
+    100%{ transform:translate(-50%, -50%) translate(var(--x2), var(--y2)) rotate(var(--spin)); opacity:0; }
+  }
+  /* 保存したとき：自分の主人公（自機・車）が宝箱から飛び出して、宝箱の上に着地する。
+     はじめは宝箱の後ろ（z-index:0）、いちばん高いところから前（z-index:2）に出る */
+  .chest-hero{
+    position:absolute;
+    left:50%; bottom:100%;
+    z-index:0;
+    height:170px;
+    width:auto;
+    margin-bottom:-14px;
+    pointer-events:none;
+    transform-origin:50% 100%;
+    animation:hero-pop 1.1s linear both;
+  }
+  .chest-hero.vehicle{ height:120px; margin-bottom:-6px; }
+  @keyframes hero-pop{
+    0%{ transform:translate(-50%, 260px) scale(.6); z-index:0; animation-timing-function:cubic-bezier(.2,.8,.4,1); }
+    45%{ transform:translate(calc(-50% - 90px), -140px) scale(1); z-index:0; animation-timing-function:cubic-bezier(.6,0,.9,.5); }
+    46%{ z-index:2; }
+    80%{ transform:translate(calc(-50% - 150px), 0) scale(1.08, .9); z-index:2; }
+    90%{ transform:translate(calc(-50% - 150px), -18px) scale(.96, 1.04); z-index:2; }
+    100%{ transform:translate(calc(-50% - 150px), 0) scale(1); z-index:2; }
+  }
+  /* 地図のふり返り：番号が1から順に光って、最後に宝箱の印が大きく光る */
+  .dots span.dot-flash{
+    animation:dot-flash .45s ease-out both;
+    animation-delay:var(--flash-delay, 0s);
+  }
+  .dots span.dot-flash.dot-chest{ animation-name:chest-flash; animation-duration:.8s; }
+  @keyframes dot-flash{
+    0%{ transform:scale(1); filter:none; }
+    40%{ transform:scale(1.35); filter:brightness(1.5) drop-shadow(0 0 10px #fff6a0); }
+    100%{ transform:scale(1); filter:none; }
+  }
+  @keyframes chest-flash{
+    0%{ transform:scale(1); filter:none; }
+    35%{ transform:scale(1.4) rotate(-6deg); filter:brightness(1.4) drop-shadow(0 0 16px #ffe14d); }
+    60%{ transform:scale(1.25) rotate(5deg); filter:brightness(1.3) drop-shadow(0 0 14px #ffe14d); }
+    100%{ transform:scale(1); filter:none; }
+  }
+  /* 飛び出す瞬間に、宝箱が少しはずむ */
+  .end-chest-wrap.burst{ animation:chest-pop .35s ease-out; }
+  @keyframes chest-pop{
+    0%{ transform:scale(1); }
+    35%{ transform:scale(1.07, .95); }
+    70%{ transform:scale(.98, 1.03); }
+    100%{ transform:scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .chest-hero, .dots span.dot-flash{ animation:none; }
+    .chest-hero{ transform:translate(calc(-50% - 150px), 0); z-index:2; }
+    #s-end.chest-reveal .end-chest{ animation:none; }
+    #s-end.chest-reveal .end-chest-wrap::before{ animation:none; opacity:1; }
+  }
+  .end-actions{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:14px;
+    width:auto;
+    z-index:1;
+    padding:0;
+  }
+  body.on-end #s-end{ padding:calc(150px * var(--s)) 20px calc(36px * var(--s)); }
+  body.on-end .end-actions{
+    position:relative;
+    left:auto; right:auto; bottom:auto;
+    z-index:1;
+    padding:0;
+    background:none;
+  }
+
+  .pop{
+    position:fixed; pointer-events:none; z-index:90;
+    font-size:22px; animation:pop .7s ease-out forwards;
+  }
+  @keyframes pop{
+    0%{ transform:translate(-50%,-50%) scale(.4); opacity:1; }
+    100%{ transform:translate(-50%,-90%) scale(1.35); opacity:0; }
+  }
+
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--wood); border-radius:4px; }
+</style>
+</head>
+<body class="on-start">
+
+<div class="map-path" id="mapPath">
+  <div class="map-track"><div class="progress-fill" id="progressFill"></div></div>
+  <div class="dots" id="dots"></div>
+</div>
+
+<div class="snap-container" id="snap">
+
+  <!-- START -->
+  <section class="section" id="s-start">
+    <img class="hero-logo" src="image/top/logo.png" alt="キミのアイデアが動き出す AI×GAME クリエイター体験">
+    <button class="btn btn-start" onclick="goTo(1)">
+      <span><ruby>冒険<rt>ぼうけん</rt></ruby>に<ruby>出発<rt>しゅっぱつ</rt></ruby></span>
+    </button>
+  </section>
+
+  <!-- QUESTIONS -->
+
+  <section class="section" data-q="genre">
+    <div class="qtitle">どんなゲーム？</div>
+    <div class="qsub">ジャンルを<ruby>選<rt>えら</rt></ruby>ぶと、そのステージの<ruby>質問<rt>しつもん</rt></ruby>が<ruby>現<rt>あらわ</rt></ruby>れるよ</div>
+    <div class="options" data-key="genre">
+      <button class="option" data-value="action" data-md="ジャンル：アクション。主人公を動かしてステージを進み、ゴールを目指す。左右に歩く。ボタンでジャンプ。飛ばない。遠距離攻撃はなし。画面の進み方・攻撃・敵・ゴールの見た目は、それぞれの質問に従う。床のほかに足場を置く。穴の数と、穴に落ちたときの戻り先は、画面の進み方の質問に従う。ジャンプはボタンを長く押すと高く跳び、すぐ離すと低く跳ぶ。足場や床から歩き出した直後（0.1秒ほど）でもジャンプできる。穴の幅は、小（ジャンプ1回で楽に越える）・中（ふつうに越える）・大（足場を踏んで渡る）を混ぜる。足場の高さもそろえず、ジャンプ1回で乗れる高さと、足場を乗りついで登る高さを混ぜる。主人公のジャンプは、ながおしで約4.5マス（288px）の高さまで届く。上下の床や足場の上面の差は2〜3マス。真上に重なる足場は3マス以上はなす（下を歩けるように）。難易度は数ではなく中身で変える。やさしいは穴がせまく敵がゆっくり、ふつうは標準、むずかしいは穴が広く敵が速く足場の間隔が広い。どの難易度でも、ジャンプを考える場所を必ず1か所は作る。ハートの増減とゲームオーバーはハートの質問に従う。点数はゴールに着くか、倒した敵の数だけ。アイテムは置かない"><span class="mark">✓</span><span class="label"><b>アクション</b><small>ジャンプ・<ruby>攻撃<rt>こうげき</rt></ruby>・ステージ<ruby>攻略<rt>こうりゃく</rt></ruby></small></span></button>
+      <button class="option" data-value="shooting" data-md="ジャンル：シューティング。自機・敵・背景は、主人公の色の質問に書いたPNGを貼る。図形で描き直さない。自機は今見えている画面の中だけ動く。画面の端は壁。外に出ない。端ではハートは減らない。弾を発射する。弾の絵は主人公の色の質問に書いたPNGを貼る。図形で描き直さない。弾が当たったら敵は消える。画面をつらぬく長い光線、連射・複数弾は作らない。ボスは作らない。敵に触れるとハートが1つ減る。0で負け。敵は弾を撃たない。クリアは制限時間が0になるまで生き残ること。敵に触れないように耐える。時間はやさしい30秒、ふつう45秒、むずかしい60秒。敵は時間が終わるまで出し続ける。点数は倒した敵の数だけ。アイテムは置かない。パワーアップは出さない。難易度は敵の速さ・出現の間隔と、上に書いた制限時間だけ変える。弾の種類は増やさない"><span class="mark">✓</span><span class="label"><b>シューティング</b><small><ruby>撃<rt>う</rt></ruby>つ・<ruby>避<rt>さ</rt></ruby>ける</small></span></button>
+      <button class="option" data-value="runner" data-md="ジャンル：ランナー。横から見る。主人公は自動で進み、障害物を避ける。上から見る視点は使わない（それはレーシング）。広いマップや、カメラが主人公を追う処理は作らない。点数は進んだ距離だけ。コースにアイテムは置かない。敵を倒して点数は増やさない"><span class="mark">✓</span><span class="label"><b>ランナー</b><small><ruby>走<rt>はし</rt></ruby>る・<ruby>避<rt>さ</rt></ruby>ける</small></span></button>
+      <button class="option" data-value="racing" data-md="ジャンル：レーシング。上から見る2Dの縦スクロール。道は下から上へ続き、車は上へ進む。後ろから見る3D風の視点は使わない。歩いている主人公は出さない。道・地面・道のわきの景色は kit が描くので、自分で描かない。ゲームの始めに kit.road({curvy, length, laps, ground}) を1回よぶ（値はコースの形・コースの長さ・舞台の質問のとおり）。距離 d はスタートの線が 0 で、上へ進むほど大きくなる。毎フレーム kit.scroll(0, -自分の距離) を渡すと道が流れ、自分の車は画面の y=400 あたりに来る。距離 d の場所の道のまん中の x は kit.roadX(d)、画面の y は kit.screenY(d)。車もじゃまものも、距離と、道のまん中からの横のずれで場所を持つ。道の走れる幅は kit.roadX(d) ± kit.roadHalf。操作：↑でアクセル（だんだん速くなる。最高速度は1秒に420px）、はなすと少しずつ遅くなる、↓でブレーキ、←→で左右に動く。道のはしより外へは出られない（止めるだけ。ハートは減らない）。車は回さず、いつも上向きで貼る。左右に動くときだけ少しかたむけてよい。スタートでは全員がスタートの線（d=0）の後ろに2列で並び、自分はいちばん後ろ。3・2・1・GO と数えてから走り出す。相手の車はCPU。それぞれ決まった速さで kit.roadX(d) にそって進み、ときどき左右に少し動く。ぶつかるじゃまものは手前で横によける。相手の車にぶつかったら自分が少し遅くなる（ハートは減らない）。車同士は重ならない。いま何位かを kit.hud の info で出す（例 [&quot;POS&quot;, &quot;3/8&quot;]）。ゴールしたらクリアにして、クリアの画面に順位を出す。点数はゴールした順位で決める（1位がいちばん多い）。弾は作らない。難易度はCPUの速さだけ変える。高度なAIは作らない"><span class="mark">✓</span><span class="label"><b>レーシング</b><small><ruby>走<rt>はし</rt></ruby>る・<ruby>競争<rt>きょうそう</rt></ruby>する</small></span></button>
+      <button class="option" data-value="rpg" data-md="ジャンル：RPG。戦闘画面のみ。コマンドを選んで敵と戦う。マップ移動や探索は作らない。戦闘は1画面。カメラは作らない。同時に出る敵は1体。出現する数は質問の指定どおり。この数にボスは含めない。つぎつぎ出てくるは3体。指定数を超えて出さない。使えるコマンドはコマンドの質問に従う。回復はどのコマンドにもある。ハートを1つ戻す（上限まで）。回数制限なし。敵のこうげきは質問の確率で、毎ターン独立に決める。前のターンの結果は使わない。攻撃しないターンは「ちからを ためている」と出す。するときは自分のコマンドのあと。固定の順番にはしない。倒された敵はこうげきしない。敵を倒すと、ハートは全部もどる。ハートの数は主人公のHP。敵のこうげきを受けると1つ減る。0で負け。ハートなしのときは倒れない。接触ダメージや障害物は作らない。MP・経験値・レベルは作らない。にげたらゲームオーバー。クリアにしない。クリアは、すべての敵を倒すこと。ボスがいるときは最後に1体出て、そのボスを倒したらクリア。点数は倒した敵の数だけ。アイテムは置かない。難易度は敵のHPだけ変える。HPの数は難易度の質問に書く。速度・敵の数・制限時間・出現頻度は変えない。"><span class="mark">✓</span><span class="label"><b>RPG</b><small>コマンドで<ruby>戦<rt>たたか</rt></ruby>う</small></span></button>
+      <button class="option" data-value="board" data-md="ジャンル：ボードゲーム。まるばつ・神経衰弱・オセロから選ぶ。2人で交互に遊ぶ。コンピューター（CPU）は作らない。マスやカードはマウスでクリックして選べる。矢印キーとEnterでも選べる。いまどちらの番かを大きく表示する。盤の左は主人公の画像、右は敵の画像。駒・石・カードに、主人公と敵の顔は描かない。まるばつの○と×は駒なので、そのまま置く。"><span class="mark">✓</span><span class="label"><b>ボードゲーム</b><small><ruby>2人<rt>ふたり</rt></ruby>で<ruby>遊<rt>あそ</rt></ruby>ぶ</small></span></button>
+      <button class="option" data-value="puzzle" data-md="ジャンル：パズル。ブロックやマスを操作して問題を解く。盤全体を1画面に収める。カメラは作らない。クリア条件は種類の質問に従う。点数を数えるときは、種類の質問の足し方だけ。アイテムは置かない。難易度は速さ・制限時間と、種類の質問に書いてある数だけ変える。敵は出さない"><span class="mark">✓</span><span class="label"><b>パズル</b><small>テトリスなど</small></span></button>
+    </div>
+  </section>
+
+  <section class="section" data-q="hero">
+    <div class="qtitle"><ruby>主人公<rt>しゅじんこう</rt></ruby>は？</div>
+    <div class="qsub"><ruby>見<rt>み</rt></ruby>た<ruby>目<rt>め</rt></ruby>のタイプ</div>
+    <div class="options" data-key="hero">
+      <button class="option" data-value="boy" data-md="主人公：男の子"><span class="mark">✓</span><span class="label"><b><ruby>男<rt>おとこ</rt></ruby>の<ruby>子<rt>こ</rt></ruby></b></span></button>
+      <button class="option" data-value="girl" data-md="主人公：女の子"><span class="mark">✓</span><span class="label"><b><ruby>女<rt>おんな</rt></ruby>の<ruby>子<rt>こ</rt></ruby></b></span></button>
+      <button class="option" data-value="robot" data-md="主人公：ロボット"><span class="mark">✓</span><span class="label"><b>ロボット</b></span></button>
+      <button class="option" data-value="monster" data-md="主人公：モンスター"><span class="mark">✓</span><span class="label"><b>モンスター</b></span></button>
+    </div>
+  </section>
+
+  <section class="section genre-question" data-q="racing-car" data-genres="racing">
+    <div class="qtitle"><ruby>主人公<rt>しゅじんこう</rt></ruby>の<ruby>色<rt>いろ</rt></ruby>は？</div>
+    <div class="qsub"><ruby>自分<rt>じぶん</rt></ruby>の<ruby>車<rt>くるま</rt></ruby>の<ruby>色<rt>いろ</rt></ruby></div>
+    <div class="options" data-key="racing-car">
+      <button class="option" data-value="blue" data-md="主人公：自分の車。色はブルー"><span class="mark">✓</span><span class="label"><b>ブルー</b></span></button>
+      <button class="option" data-value="red" data-md="主人公：自分の車。色はレッド"><span class="mark">✓</span><span class="label"><b>レッド</b></span></button>
+      <button class="option" data-value="green" data-md="主人公：自分の車。色はグリーン"><span class="mark">✓</span><span class="label"><b>グリーン</b></span></button>
+    </div>
+  </section>
+
+  <section class="section genre-question" data-q="shooting-ship" data-genres="shooting">
+    <div class="qtitle"><ruby>主人公<rt>しゅじんこう</rt></ruby>の<ruby>色<rt>いろ</rt></ruby>は？</div>
+    <div class="qsub"><ruby>自機<rt>じき</rt></ruby>の<ruby>色<rt>いろ</rt></ruby></div>
+    <div class="options" data-key="shooting-ship">
+      <button class="option" data-value="blue" data-md="主人公：自機（宇宙船）。色はブルー"><span class="mark">✓</span><span class="label"><b>ブルー</b></span></button>
+      <button class="option" data-value="red" data-md="主人公：自機（宇宙船）。色はレッド"><span class="mark">✓</span><span class="label"><b>レッド</b></span></button>
+      <button class="option" data-value="green" data-md="主人公：自機（宇宙船）。色はグリーン"><span class="mark">✓</span><span class="label"><b>グリーン</b></span></button>
+    </div>
+  </section>
+
+  <section class="section" data-q="world">
+    <div class="qtitle"><ruby>舞台<rt>ぶたい</rt></ruby>はどこ？</div>
+    <div class="qsub"><ruby>背景<rt>はいけい</rt></ruby>・<ruby>世界観<rt>せかいかん</rt></ruby></div>
+    <div class="options" data-key="world">
+      <button class="option" data-value="nature" data-md="舞台：草原。丘・森・木など"><span class="mark">✓</span><span class="label"><b><ruby>草原<rt>そうげん</rt></ruby></b></span></button>
+      <button class="option" data-value="snow" data-md="舞台：雪山。雪の山・雪の積もった木など"><span class="mark">✓</span><span class="label"><b><ruby>雪山<rt>ゆきやま</rt></ruby></b></span></button>
+      <button class="option" data-value="desert" data-md="舞台：砂漠。砂の丘・サボテン・ピラミッドなど"><span class="mark">✓</span><span class="label"><b><ruby>砂漠<rt>さばく</rt></ruby></b></span></button>
+      <button class="option" data-value="volcano" data-md="舞台：火山。けむりを出す火山・溶岩・岩など"><span class="mark">✓</span><span class="label"><b><ruby>火山<rt>かざん</rt></ruby></b></span></button>
+      <button class="option" data-value="fantasy" data-md="舞台：ファンタジー。城・ふしぎな大地など"><span class="mark">✓</span><span class="label"><b>ファンタジー</b></span></button>
+      <button class="option" data-value="scifi" data-md="舞台：宇宙。星・惑星など"><span class="mark">✓</span><span class="label"><b><ruby>宇宙<rt>うちゅう</rt></ruby></b></span></button>
+    </div>
+  </section>
+
+  <section class="section genre-question" data-q="action-view" data-genres="action">
+    <div class="qtitle"><ruby>画面<rt>がめん</rt></ruby>はどう<ruby>動<rt>うご</rt></ruby>く？</div><div class="qsub"><ruby>主人公<rt>しゅじんこう</rt></ruby>は<ruby>画面<rt>がめん</rt></ruby>の<ruby>中<rt>なか</rt></ruby>。スクロールは5<ruby>画面<rt>がめん</rt></ruby><ruby>分<rt>ぶん</rt></ruby></div>
+    <div class="options" data-key="action-view">
+      <button class="option" data-value="horizontal" data-md="アクション画面：横スクロール。主人公の画面上の位置はほぼ固定。歩くと世界（背景・敵・障害物）が左右に動く。ステージの長さは画面5枚ぶん（約4800px）。難易度で長さは変えない。主人公を追いかけるカメラの機能は作らない（世界を動かして見せるだけ）。遠距離攻撃はなし。左右に歩く。ボタンでジャンプ。飛ばない。スタートは左の床。ジャンプできる。床のほかに足場を画面1枚に1〜2個（合計5〜8個）置く。穴は3つ以上置く。穴に落ちたら、ハートを1つ減らして、落ちた穴の手前の地面に戻す（スタートまでは戻さない）。5枚の流れ：1枚目は練習で、小さい穴だけ。敵・箱・トゲは出さない。2枚目は広い穴と、足場の乗りつぎ。3枚目から、敵・箱・トゲが選ばれていれば出し始める。4枚目は穴と、敵や箱の組み合わせ。5枚目はゴール前の山場で、いちばんむずかしくする。ゴールはコースの右端に置く。見た目は質問に従う。触れたらクリア。見た目だけ変える"><span class="mark">✓</span><span class="label"><b><ruby>横<rt>よこ</rt></ruby>スクロール</b></span></button>
+      <button class="option" data-value="vertical" data-md="アクション画面：縦スクロール。主人公が床や足場に着地したときだけ、0.3秒ほどでなめらかに世界（背景・敵・障害物）をずらし、主人公を画面の下から3分の1の高さに戻す。ジャンプ中と落ちているあいだは世界を動かさない。ステージの高さは画面5枚ぶん（約2700px）。難易度で高さは変えない。主人公を追いかけるカメラの機能は作らない（世界を動かして見せるだけ）。遠距離攻撃はなし。左右に歩く。ボタンでジャンプ。飛ばない。上へはジャンプと足場。スタートは下の床。ジャンプできる。床のほかに足場を画面1枚に2〜3個（合計10〜15個）置く。足場のあいだに穴（足場のない所）を3つ以上作る。落ちたら、ハートを1つ減らして、最後に立っていた足場に戻す（スタートまでは戻さない）。5枚の流れ（下から上へ）：1枚目は練習で、低い足場と小さい穴だけ。敵・箱・トゲは出さない。2枚目は広い穴と、足場の乗りつぎ。3枚目から、敵・箱・トゲが選ばれていれば出し始める。4枚目は穴と、敵や箱の組み合わせ。5枚目はゴール前の山場で、いちばんむずかしくする。ゴールはコースの上端に置く。見た目は質問に従う。触れたらクリア。見た目だけ変える"><span class="mark">✓</span><span class="label"><b><ruby>縦<rt>たて</rt></ruby>スクロール</b></span></button>
+      <button class="option" data-value="fixed" data-md="アクション画面：画面固定。世界は動かさない。今見えている1枚だけ。広いマップやカメラは作らない。遠距離攻撃はなし。左右に歩く。ボタンでジャンプ。飛ばない。スタートは左下の床。ジャンプできる。床のほかに足場を4〜6個、高さを変えて置く。足場は2段まで。いちばん上の足場は床から4マス上まで。穴は2つ以上置く。穴に落ちたら、ハートを1つ減らして、スタートに戻す（画面1枚だけなのでスタートでよい）。ゴールは画面の右上の足場に置き、足場を左右に行ったり来たりしながらのぼらないと届かないようにする。右へ歩くだけでは届かない。見た目は質問に従う。触れたらクリア。見た目だけ変える"><span class="mark">✓</span><span class="label"><b><ruby>画面固定<rt>がめんこてい</rt></ruby></b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="action-attack" data-genres="action">
+    <div class="qtitle">どうやって<ruby>攻撃<rt>こうげき</rt></ruby>する？</div><div class="qsub"><ruby>攻撃方法<rt>こうげきほうほう</rt></ruby></div>
+    <div class="options" data-key="action-attack">
+      <button class="option" data-value="sword" data-md="攻撃：剣。ボタンで振る。主人公の近くに攻撃判定を出す。当たった敵は消える。遠距離攻撃はなし"><span class="mark">✓</span><span class="label"><b><ruby>剣<rt>けん</rt></ruby></b></span></button>
+      <button class="option" data-value="stomp" data-md="攻撃：踏みつけ。敵の上から着地して倒す。倒した敵は消える。遠距離攻撃はなし"><span class="mark">✓</span><span class="label"><b><ruby>踏<rt>ふ</rt></ruby>みつけ</b></span></button>
+      <button class="option" data-value="none" data-md="攻撃：なし。敵や障害物を避けて進む。遠距離攻撃はなし"><span class="mark">✓</span><span class="label"><b><ruby>攻撃<rt>こうげき</rt></ruby>しない</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="action-enemy" data-genres="action">
+    <div class="qtitle"><ruby>何<rt>なに</rt></ruby>がいる？</div><div class="qsub">ステージに<ruby>出<rt>で</rt></ruby>るもの</div>
+    <div class="options" data-key="action-enemy">
+      <button class="option" data-value="none" data-md="ステージ：動く敵は出さない。そのかわり穴と足場のジャンプでむずかしさを作る。攻撃が剣のときは、剣でこわせる箱を道に置いて道をふさぐ（画面固定は2〜3個、スクロールは画面1枚に1個ほど）。遠距離攻撃はなし"><span class="mark">✓</span><span class="label"><b><ruby>敵<rt>てき</rt></ruby>なし</b></span></button>
+      <button class="option" data-value="obstacle" data-md="ステージ：動く敵は出さない。トゲなど、触るとダメージの障害物だけ置く（スクロールの画面は、画面1枚に1〜2個ずつ）。触れるとハートが1つ減る。攻撃が剣のときは、剣でこわせる箱を道に置いて道をふさぐ（画面固定は2〜3個、スクロールは画面1枚に1個ほど）。トゲはこわせない。遠距離攻撃はなし"><span class="mark">✓</span><span class="label"><b><ruby>障害物<rt>しょうがいぶつ</rt></ruby>だけ</b></span></button>
+      <button class="option" data-value="fly" data-md="敵：空を飛ぶ。画面の端から出て、主人公の頭くらいの高さを、上下にゆらゆらしながら反対側へまっすぐ飛び、画面の外で消える。向きは変えない。主人公を追わない。弾は撃たない。同時に2体まで。スクロールの画面は、全体で画面1枚に1体ほど（合計5体前後）を順番に出す。触れるとハートが1つ減る。倒せるかどうかは攻撃の質問に従う（攻撃なしなら倒せないので、よけて進む）。遠距離攻撃はなし"><span class="mark">✓</span><span class="label"><b><ruby>飛<rt>と</rt></ruby>んでくる<ruby>敵<rt>てき</rt></ruby></b></span></button>
+      <button class="option" data-value="patrol" data-md="敵：決まった範囲を行ったり来たりする。主人公を追わない。弾は撃たない。同時に2体まで。スクロールの画面は、全体で画面1枚に1体ほど（合計5体前後）を場所を変えて置く。触れるとハートが1つ減る。倒せるかどうかは攻撃の質問に従う（攻撃なしなら倒せないので、よけて進む）。遠距離攻撃はなし"><span class="mark">✓</span><span class="label"><b><ruby>行<rt>い</rt></ruby>ったり<ruby>来<rt>き</rt></ruby>たりする<ruby>敵<rt>てき</rt></ruby></b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="action-goal" data-genres="action">
+    <div class="qtitle">ゴールの<ruby>見<rt>み</rt></ruby>た<ruby>目<rt>め</rt></ruby>は？</div><div class="qsub">コースの<ruby>端<rt>はし</rt></ruby>。<ruby>触<rt>ふ</rt></ruby>れたらクリア。<ruby>見<rt>み</rt></ruby>た<ruby>目<rt>め</rt></ruby>だけ</div>
+    <div class="options" data-key="action-goal">
+      <button class="option" data-value="flag" data-md="ゴールの見た目：旗。置く場所は画面の進み方の質問に従う。触れたらクリア。大きさ・当たり判定・クリアの仕組みは他の見た目と同じ。game-assets/_common/objects/flag_red_a.png を貼る。HTMLからの相対パスで読む。PNGの中身は埋め込まない。扉や別シーンは作らない"><span class="mark">✓</span><span class="label"><b><ruby>旗<rt>はた</rt></ruby></b></span></button>
+      <button class="option" data-value="gem" data-md="ゴールの見た目：宝石。置く場所は画面の進み方の質問に従う。触れたらクリア。大きさ・当たり判定・クリアの仕組みは他の見た目と同じ。game-assets/_common/objects/gem_yellow.png を貼る。HTMLからの相対パスで読む。PNGの中身は埋め込まない。扉や別シーンは作らない"><span class="mark">✓</span><span class="label"><b><ruby>宝石<rt>ほうせき</rt></ruby></b></span></button>
+      <button class="option" data-value="star" data-md="ゴールの見た目：星。置く場所は画面の進み方の質問に従う。触れたらクリア。大きさ・当たり判定・クリアの仕組みは他の見た目と同じ。game-assets/_common/objects/star.png を貼る。HTMLからの相対パスで読む。PNGの中身は埋め込まない。扉や別シーンは作らない"><span class="mark">✓</span><span class="label"><b><ruby>星<rt>ほし</rt></ruby></b></span></button>
+    </div>
+  </section>
+
+  <section class="section genre-question" data-q="shooting-view" data-genres="shooting">
+    <div class="qtitle"><ruby>画面<rt>がめん</rt></ruby>はどう<ruby>動<rt>うご</rt></ruby>く？</div><div class="qsub"><ruby>背景<rt>はいけい</rt></ruby>の<ruby>流<rt>なが</rt></ruby>れと<ruby>敵<rt>てき</rt></ruby>の<ruby>出<rt>で</rt></ruby><ruby>方<rt>かた</rt></ruby></div>
+    <div class="options" data-key="shooting-view">
+      <button class="option" data-value="vertical" data-md="シューティング画面：縦スクロール。戦場は今見えている画面の中だけ。広いマップや、カメラが自機を追う処理は作らない。背景が上から下へ流れる。敵は画面の上から出現し、下へまっすぐ進む。追わない。画面の下で消える。自機の弾は上へ飛ぶ。自機の初期位置は下の中央。マウスや多方向は作らない"><span class="mark">✓</span><span class="label"><b><ruby>縦<rt>たて</rt></ruby>スクロール</b><small><ruby>上<rt>うえ</rt></ruby>から<ruby>敵<rt>てき</rt></ruby></small></span></button>
+      <button class="option" data-value="horizontal" data-md="シューティング画面：横スクロール。戦場は今見えている画面の中だけ。広いマップや、カメラが自機を追う処理は作らない。背景が右から左へ流れる。敵は画面の右から出現し、左へまっすぐ進む。追わない。画面の左で消える。自機の弾は右へ飛ぶ。自機の初期位置は左の中央。マウスや多方向は作らない"><span class="mark">✓</span><span class="label"><b><ruby>横<rt>よこ</rt></ruby>スクロール</b><small><ruby>右<rt>みぎ</rt></ruby>から<ruby>敵<rt>てき</rt></ruby></small></span></button>
+      <button class="option" data-value="fixed" data-md="シューティング画面：画面固定。戦場は今見えている画面の中だけ。広いマップやカメラは作らない。背景は流さない。敵は上のほうに出現し、下へまっすぐ進む。追わない。画面の下で消える。自機の弾は上へ飛ぶ。自機の初期位置は下の中央。マウスや多方向は作らない"><span class="mark">✓</span><span class="label"><b><ruby>画面固定<rt>がめんこてい</rt></ruby></b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="shooting-move" data-genres="shooting">
+    <div class="qtitle"><ruby>主人公<rt>しゅじんこう</rt></ruby>はどう<ruby>動<rt>うご</rt></ruby>く？</div><div class="qsub"><ruby>移動方法<rt>いどうほうほう</rt></ruby></div>
+    <div class="options" data-key="shooting-move">
+      <button class="option" data-value="fourway" data-md="移動：上下左右の4方向。今見えている画面の中だけ。端は壁。外に出ない。端ではハートは減らない"><span class="mark">✓</span><span class="label"><b>4<ruby>方向<rt>ほうこう</rt></ruby></b><small>↑↓←→</small></span></button>
+      <button class="option" data-value="horizontal" data-md="移動：左右のみ。今見えている画面の中だけ。端は壁。外に出ない。端ではハートは減らない"><span class="mark">✓</span><span class="label"><b><ruby>左右<rt>さゆう</rt></ruby>のみ</b><small>←→</small></span></button>
+      <button class="option" data-value="vertical" data-md="移動：上下のみ。今見えている画面の中だけ。端は壁。外に出ない。端ではハートは減らない"><span class="mark">✓</span><span class="label"><b><ruby>上下<rt>じょうげ</rt></ruby>のみ</b><small>↑↓</small></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="shooting-fire" data-genres="shooting">
+    <div class="qtitle">どうやって<ruby>撃<rt>う</rt></ruby>つ？</div><div class="qsub"><ruby>弾<rt>たま</rt></ruby>の<ruby>出<rt>だ</rt></ruby>し<ruby>方<rt>かた</rt></ruby></div>
+    <div class="options" data-key="shooting-fire">
+      <button class="option" data-value="tap" data-md="撃ちかた：ボタンを押したときに弾を1発ずつ発射する。弾は1種類で、主人公の色の質問に書いた弾のPNGを貼る。図形で描き直さない。一定方向に飛ぶ。向きは画面の種類に従う（縦スクロールと画面固定は上、横スクロールは右）。同時に出してよい弾は同じ向きの1列だけ。画面をつらぬく長い光線、扇状の複数弾、連射で弾をばらまく処理は作らない。マウスや多方向は作らない"><span class="mark">✓</span><span class="label"><b>ボタンで<ruby>撃<rt>う</rt></ruby>つ</b><small><ruby>押<rt>お</rt></ruby>すと1<ruby>発<rt>ぱつ</rt></ruby></small></span></button>
+      <button class="option" data-value="auto" data-md="撃ちかた：一定間隔で自動的に弾を発射する。弾は1種類で、主人公の色の質問に書いた弾のPNGを貼る。図形で描き直さない。一定方向に飛ぶ。向きは画面の種類に従う（縦スクロールと画面固定は上、横スクロールは右）。ボタンで撃たなくてよい。同時に出してよい弾は同じ向きの1列だけ。画面をつらぬく長い光線、扇状の複数弾は作らない。マウスや多方向は作らない"><span class="mark">✓</span><span class="label"><b><ruby>自動<rt>じどう</rt></ruby>で<ruby>撃<rt>う</rt></ruby>つ</b><small><ruby>勝手<rt>かって</rt></ruby>に<ruby>出<rt>で</rt></ruby>る</small></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="shooting-enemy" data-genres="shooting">
+    <div class="qtitle"><ruby>敵<rt>てき</rt></ruby>はどう<ruby>出<rt>で</rt></ruby>てくる？</div><div class="qsub"><ruby>敵<rt>てき</rt></ruby>の<ruby>出現<rt>しゅつげん</rt></ruby>パターン</div>
+    <div class="options" data-key="shooting-enemy">
+      <button class="option" data-value="waves" data-md="敵：ウェーブごとに出現する。1波3体。時間が終わるまで波を繰り返す。出た辺から反対側へまっすぐ進む。追わない。弾は撃たない。画面の外で消える。ボスは作らない"><span class="mark">✓</span><span class="label"><b>ウェーブ</b></span></button>
+      <button class="option" data-value="random" data-md="敵：出てくる位置をランダムにする。出てくる辺は画面の種類の質問に従い、その辺の中で位置だけランダムに選ぶ（縦スクロールと画面固定は上の端の左右の位置、横スクロールは右の端の上下の位置）。時間が終わるまで出し続ける。一度に出す数は少なくする。出た辺から反対側へまっすぐ進む。追わない。弾は撃たない。画面の外で消える。ボスは作らない"><span class="mark">✓</span><span class="label"><b>ランダム</b></span></button>
+    </div>
+  </section>
+
+  <section class="section genre-question" data-q="runner-view" data-genres="runner">
+    <div class="qtitle">どう<ruby>進<rt>すす</rt></ruby>む？</div><div class="qsub"><ruby>横<rt>よこ</rt></ruby>から<ruby>見<rt>み</rt></ruby>る。<ruby>上<rt>うえ</rt></ruby>から<ruby>見<rt>み</rt></ruby>るのはレーシング</div>
+    <div class="options" data-key="runner-view">
+      <button class="option" data-value="run" data-md="ランナー：よこに走る。横から見る。右へ自動で進む。主人公の画面上の位置はほぼ固定。自分で走って進まない。ステージの長さは画面8枚ぶんが目安。難易度で短く長くしてよい。障害物はだいたい2秒に1回。広いマップやカメラ追従は作らない。上から見る視点は使わない。点数は進んだ距離だけ。アイテムは置かない"><span class="mark">✓</span><span class="label"><b><ruby>横<rt>よこ</rt></ruby>に<ruby>走<rt>はし</rt></ruby>る</b></span></button>
+      <button class="option" data-value="fall" data-md="ランナー：したに落ちる。横から見る。下へ自動で落ちる。左右に動いてよける。広いマップや、カメラが主人公を追う処理は作らない。上から見る視点は使わない。長さの目安は画面8枚ぶん落ちる。障害物はだいたい2秒に1回。点数は落ちた距離だけ。アイテムは置かない"><span class="mark">✓</span><span class="label"><b><ruby>下<rt>した</rt></ruby>に<ruby>落<rt>お</rt></ruby>ちる</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="runner-jump" data-genres="runner" data-runner-types="run">
+    <div class="qtitle">ジャンプは？</div><div class="qsub"><ruby>横<rt>よこ</rt></ruby>に<ruby>走<rt>はし</rt></ruby>るとき</div>
+    <div class="options" data-key="runner-jump">
+      <button class="option" data-value="jump" data-md="ジャンプ：1回ジャンプできる。よこに走るランナー"><span class="mark">✓</span><span class="label"><b>ジャンプ</b></span></button>
+      <button class="option" data-value="double" data-md="ジャンプ：空中でもう一度ジャンプできる（二段ジャンプ）。よこに走るランナー"><span class="mark">✓</span><span class="label"><b><ruby>二段<rt>にだん</rt></ruby>ジャンプ</b></span></button>
+      <button class="option" data-value="none" data-md="ジャンプ：なし。ジャンプの操作は作らない。主人公は自動で走り続けるだけで、障害物を避ける操作はない。障害物に当たったときはハートの質問に従う。穴は出さない。よこに走るランナー"><span class="mark">✓</span><span class="label"><b>ジャンプなし</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="runner-obstacle" data-genres="runner" data-runner-types="run">
+    <div class="qtitle"><ruby>何<rt>なに</rt></ruby>を<ruby>避<rt>さ</rt></ruby>ける？</div><div class="qsub">だいたい2<ruby>秒<rt>びょう</rt></ruby>に1<ruby>回<rt>かい</rt></ruby></div>
+    <div class="options" data-key="runner-obstacle">
+      <button class="option" data-value="spike" data-md="障害物：トゲ。触るとダメージ。ジャンプで避ける。間隔はだいたい2秒に1回"><span class="mark">✓</span><span class="label"><b>トゲ</b></span></button>
+      <button class="option" data-value="hole" data-md="障害物：穴。ジャンプで越える。落ちたらハートを1つ減らして、穴の先の床に戻す。ジャンプなしのときは出さない。間隔はだいたい2秒に1回"><span class="mark">✓</span><span class="label"><b><ruby>穴<rt>あな</rt></ruby></b></span></button>
+      <button class="option" data-value="enemy" data-md="障害物：敵が手前から走ってくる。触れるとダメージ。弾は撃たない。間隔はだいたい2秒に1回"><span class="mark">✓</span><span class="label"><b><ruby>敵<rt>てき</rt></ruby></b></span></button>
+      <button class="option" data-value="mixed" data-md="障害物：トゲ・穴・敵を混ぜる。ジャンプなしなら穴は入れない。穴に落ちたらハートを1つ減らして、穴の先の床に戻す。間隔はだいたい2秒に1回"><span class="mark">✓</span><span class="label"><b>いろいろ</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="runner-goal-run" data-genres="runner" data-runner-types="run">
+    <div class="qtitle">どうなったら<ruby>勝<rt>か</rt></ruby>ち？</div><div class="qsub"><ruby>横<rt>よこ</rt></ruby>に<ruby>走<rt>はし</rt></ruby>るとき</div>
+    <div class="options" data-key="runner-goal-run">
+      <button class="option" data-value="flag" data-md="ランナーのクリア：右端の旗に触れたらクリア。長さの目安は画面8枚。難易度で短く長くしてよい"><span class="mark">✓</span><span class="label"><b><ruby>旗<rt>はた</rt></ruby>まで<ruby>走<rt>はし</rt></ruby>る</b></span></button>
+      <button class="option" data-value="survive" data-md="ランナーのクリア：制限時間が0になるまで走り続けたらクリア。時間はやさしい30秒、ふつう45秒、むずかしい60秒"><span class="mark">✓</span><span class="label"><b><ruby>時間<rt>じかん</rt></ruby>まで<ruby>耐<rt>た</rt></ruby>える</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="runner-fall-move" data-genres="runner" data-runner-types="fall">
+    <div class="qtitle">どう<ruby>動<rt>うご</rt></ruby>く？</div><div class="qsub"><ruby>下<rt>した</rt></ruby>に<ruby>落<rt>お</rt></ruby>ちるとき</div>
+    <div class="options" data-key="runner-fall-move">
+      <button class="option" data-value="side" data-md="操作：左右にだけ動く。ジャンプはできない。したに落ちるランナー"><span class="mark">✓</span><span class="label"><b><ruby>左右<rt>さゆう</rt></ruby>だけ</b></span></button>
+      <button class="option" data-value="jump" data-md="操作：左右に動ける。足場に乗ると跳ねる。したに落ちるランナー"><span class="mark">✓</span><span class="label"><b><ruby>左右<rt>さゆう</rt></ruby>とジャンプ</b><small><ruby>足場<rt>あしば</rt></ruby>で<ruby>跳<rt>は</rt></ruby>ねる</small></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="runner-fall-hazard" data-genres="runner" data-runner-types="fall">
+    <div class="qtitle"><ruby>何<rt>なに</rt></ruby>がある？</div><div class="qsub"><ruby>下<rt>した</rt></ruby>に<ruby>落<rt>お</rt></ruby>ちるとき。だいたい2<ruby>秒<rt>びょう</rt></ruby>に1<ruby>回<rt>かい</rt></ruby></div>
+    <div class="options" data-key="runner-fall-hazard">
+      <button class="option" data-value="spike" data-md="障害物：トゲ。触るとダメージ。左右で避ける。間隔はだいたい2秒に1回。したに落ちるランナー"><span class="mark">✓</span><span class="label"><b>トゲ</b></span></button>
+      <button class="option" data-value="enemy" data-md="障害物：敵。触れるとダメージ。弾は撃たない。間隔はだいたい2秒に1回。したに落ちるランナー"><span class="mark">✓</span><span class="label"><b><ruby>敵<rt>てき</rt></ruby></b></span></button>
+      <button class="option" data-value="platform" data-md="足場：乗ると跳ねる。間隔はだいたい2秒に1回。したに落ちるランナー"><span class="mark">✓</span><span class="label"><b><ruby>足場<rt>あしば</rt></ruby></b><small><ruby>乗<rt>の</rt></ruby>ると<ruby>跳<rt>は</rt></ruby>ねる</small></span></button>
+      <button class="option" data-value="mixed" data-md="トゲ・敵・足場を混ぜる。間隔はだいたい2秒に1回。したに落ちるランナー"><span class="mark">✓</span><span class="label"><b>いろいろ</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="runner-goal-fall" data-genres="runner" data-runner-types="fall">
+    <div class="qtitle">どうなったら<ruby>勝<rt>か</rt></ruby>ち？</div><div class="qsub"><ruby>下<rt>した</rt></ruby>に<ruby>落<rt>お</rt></ruby>ちるとき</div>
+    <div class="options" data-key="runner-goal-fall">
+      <button class="option" data-value="flag" data-md="ランナーのクリア：いちばん下の旗に触れたらクリア。長さの目安は画面8枚ぶん落ちる。難易度で短く長くしてよい"><span class="mark">✓</span><span class="label"><b>いちばん<ruby>下<rt>した</rt></ruby>の<ruby>旗<rt>はた</rt></ruby></b></span></button>
+      <button class="option" data-value="survive" data-md="ランナーのクリア：制限時間が0になるまで落ち続けたらクリア。時間はやさしい30秒、ふつう45秒、むずかしい60秒"><span class="mark">✓</span><span class="label"><b><ruby>時間<rt>じかん</rt></ruby>まで<ruby>耐<rt>た</rt></ruby>える</b></span></button>
+    </div>
+  </section>
+
+  <section class="section genre-question" data-q="racing-shape" data-genres="racing">
+    <div class="qtitle">コースの<ruby>形<rt>かたち</rt></ruby>は？</div><div class="qsub"><ruby>道<rt>みち</rt></ruby>が<ruby>曲<rt>ま</rt></ruby>がるかどうか</div>
+    <div class="options" data-key="racing-shape">
+      <button class="option" data-value="straight" data-md="コースの形：まっすぐ。kit.road の curvy は false"><span class="mark">✓</span><span class="label"><b>まっすぐ</b></span></button>
+      <button class="option" data-value="curvy" data-md="コースの形：まがる。kit.road の curvy は true（道がゆるく左右に曲がる。曲がり方は kit が決める）。CPUも自分も kit.roadX(d) にそって曲がる"><span class="mark">✓</span><span class="label"><b>まがる</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="racing-course" data-genres="racing">
+    <div class="qtitle">コースの<ruby>長<rt>なが</rt></ruby>さは？</div><div class="qsub">ゴールまでの<ruby>長<rt>なが</rt></ruby>さ</div>
+    <div class="options" data-key="racing-course">
+      <button class="option" data-value="short" data-md="コースの長さ：みじかい。kit.road の length は 12600、laps は 1（最高速度で約30秒）。d=12600 の線を越えたらゴール"><span class="mark">✓</span><span class="label"><b><ruby>短<rt>みじか</rt></ruby>い</b></span></button>
+      <button class="option" data-value="long" data-md="コースの長さ：ながい。kit.road の length は 25200、laps は 1（最高速度で約60秒）。d=25200 の線を越えたらゴール"><span class="mark">✓</span><span class="label"><b><ruby>長<rt>なが</rt></ruby>い</b></span></button>
+      <button class="option" data-value="laps" data-md="コースの長さ：3周。kit.road の length は 8400、laps は 3（1周は最高速度で約20秒）。d=8400・16800・25200 に線があり、線を越えるたびに1周。周回数を kit.hud の info で出す（例 [&quot;LAP&quot;, &quot;2/3&quot;]）。線を越えたときの合図（LAP 2/3・FINAL LAP! の大きな文字と音）は kit が出すので、自分では作らない。3周目の線を越えたらゴール。周回数はどの難易度も3周のまま"><span class="mark">✓</span><span class="label"><b>3<ruby>周<rt>しゅう</rt></ruby></b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="racing-obstacle" data-genres="racing">
+    <div class="qtitle"><ruby>道<rt>みち</rt></ruby>に<ruby>何<rt>なに</rt></ruby>がある？</div><div class="qsub">じゃまものと、ダッシュ<ruby>板<rt>ばん</rt></ruby></div>
+    <div class="options" data-key="racing-obstacle">
+      <button class="option" data-value="none" data-md="道にあるもの：なし。道の上には相手の車だけ"><span class="mark">✓</span><span class="label"><b>なし</b><small><ruby>車<rt>くるま</rt></ruby>だけ</small></span></button>
+      <button class="option" data-value="cone" data-md="道にあるもの：コーン。game-assets/racing/objects/cone_straight.png（45×44）。スタートから画面3枚ぶんは置かない。そのあとは画面1枚に1つくらい、道の中に置く。必ずよけて通れるすき間を残す。ぶつかるとはね飛んで cone_down.png（たおれた絵）になり、自分は少し遅くなる。ハートは減らない"><span class="mark">✓</span><span class="label"><b>コーン</b><small>はね<ruby>飛<rt>と</rt></ruby>ぶ</small></span></button>
+      <button class="option" data-value="tires" data-md="道にあるもの：タイヤの山。game-assets/racing/objects/tires_red.png と tires_white.png（56×56）を2〜3個まとめて置く。スタートから画面3枚ぶんは置かない。そのあとは画面1枚に1つくらい、道の中に置く。必ずよけて通れるすき間を残す。ぶつかると止まりかけるほど遅くなり、ハートが1つ減る（ハートの質問に従う）。1秒ほど点滅して、続けては減らない"><span class="mark">✓</span><span class="label"><b>タイヤの<ruby>山<rt>やま</rt></ruby></b><small>ハートが<ruby>減<rt>へ</rt></ruby>る</small></span></button>
+      <button class="option" data-value="oil" data-md="道にあるもの：オイル。game-assets/racing/objects/oil.png（109×95）。スタートから画面3枚ぶんは置かない。そのあとは画面1枚に1つくらい、道の中に置く。必ずよけて通れるすき間を残す。上を通ると0.5秒ほど横にすべって、左右の操作が効きにくくなる。ハートは減らない"><span class="mark">✓</span><span class="label"><b>オイル</b><small>すべる</small></span></button>
+      <button class="option" data-value="dash" data-md="道にあるもの：ダッシュ板。game-assets/racing/objects/arrow_yellow.png（165×99。上向きの矢印）。スタートから画面3枚ぶんは置かない。そのあとは画面1枚に1つくらい、道の中に置く。必ずよけて通れるすき間を残す。上を通ると1秒ほど最高速度より速く（1.5倍）なる。CPUはダッシュ板をよけない"><span class="mark">✓</span><span class="label"><b>ダッシュ<ruby>板<rt>ばん</rt></ruby></b><small><ruby>速<rt>はや</rt></ruby>くなる</small></span></button>
+      <button class="option" data-value="mixed" data-md="道にあるもの：いろいろ。コーン（game-assets/racing/objects/cone_straight.png、ぶつかると cone_down.png になって少し遅くなる）・タイヤの山（tires_red.png・tires_white.png を2〜3個。止まりかけてハートが1つ減る）・オイル（oil.png、0.5秒ほど横にすべる）・ダッシュ板（arrow_yellow.png、1秒ほど1.5倍の速さ）を混ぜて置く。スタートから画面3枚ぶんは置かない。そのあとは画面1枚に1つくらい、道の中に置く。必ずよけて通れるすき間を残す。ハートはハートの質問に従う"><span class="mark">✓</span><span class="label"><b>いろいろ</b><small><ruby>全部<rt>ぜんぶ</rt></ruby></small></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="racing-rival" data-genres="racing">
+    <div class="qtitle"><ruby>相手<rt>あいて</rt></ruby>は？</div><div class="qsub">いっしょに<ruby>走<rt>はし</rt></ruby>るCPU</div>
+    <div class="options" data-key="racing-rival">
+      <button class="option" data-value="one" data-md="相手の車：1台。CPU。1対1で走る"><span class="mark">✓</span><span class="label"><b>1<ruby>台<rt>だい</rt></ruby></b></span></button>
+      <button class="option" data-value="three" data-md="相手の車：3台。CPU。自分を入れて4台で走る"><span class="mark">✓</span><span class="label"><b>3<ruby>台<rt>だい</rt></ruby></b></span></button>
+      <button class="option" data-value="seven" data-md="相手の車：7台。CPU。自分を入れて8台で走る"><span class="mark">✓</span><span class="label"><b>7<ruby>台<rt>だい</rt></ruby></b></span></button>
+    </div>
+  </section>
+
+  <section class="section genre-question" data-q="rpg-command" data-genres="rpg">
+    <div class="qtitle">コマンドは？</div><div class="qsub"><ruby>戦闘画面<rt>せんとうがめん</rt></ruby>だけで<ruby>選<rt>えら</rt></ruby>ぶ</div>
+    <div class="options" data-key="rpg-command">
+      <button class="option" data-value="fight" data-md="RPGコマンド：たたかう・回復・にげる。たたかうはダメージ1。まほうは出さない。にげたらゲームオーバー。クリアにしない。マップ移動は作らない"><span class="mark">✓</span><span class="label"><b>3つのコマンド</b><small>たたかう・<ruby>回復<rt>かいふく</rt></ruby>・にげる</small></span></button>
+      <button class="option" data-value="magic" data-md="RPGコマンド：たたかう・まほう・回復・にげる。たたかうはダメージ1。まほうはダメージ2。MPは作らない。回数制限なし。にげたらゲームオーバー。マップ移動は作らない"><span class="mark">✓</span><span class="label"><b>4つのコマンド</b><small>たたかう・<ruby>魔法<rt>まほう</rt></ruby>・<ruby>回復<rt>かいふく</rt></ruby>・にげる</small></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="rpg-enemy" data-genres="rpg">
+    <div class="qtitle"><ruby>敵<rt>てき</rt></ruby>の<ruby>数<rt>かず</rt></ruby>は？</div><div class="qsub"><ruby>指定<rt>してい</rt></ruby>した<ruby>数<rt>かず</rt></ruby>だけ<ruby>出<rt>で</rt></ruby>てくる</div>
+    <div class="options" data-key="rpg-enemy">
+      <button class="option" data-value="one" data-md="敵の数：1体。この数だけ出現する"><span class="mark">✓</span><span class="label"><b><ruby>敵<rt>てき</rt></ruby>1<ruby>体<rt>たい</rt></ruby></b></span></button>
+      <button class="option" data-value="two" data-md="敵の数：2体。この数だけ出現する"><span class="mark">✓</span><span class="label"><b><ruby>敵<rt>てき</rt></ruby>2<ruby>体<rt>たい</rt></ruby></b></span></button>
+      <button class="option" data-value="series" data-md="敵の数：つぎつぎ出てくるは3体。この数だけ出現する"><span class="mark">✓</span><span class="label"><b>つぎつぎ<ruby>出<rt>で</rt></ruby>てくる</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="rpg-attack" data-genres="rpg">
+    <div class="qtitle"><ruby>敵<rt>てき</rt></ruby>の<ruby>攻撃<rt>こうげき</rt></ruby>は？</div><div class="qsub"><ruby>毎<rt>まい</rt></ruby>ターンの<ruby>確率<rt>かくりつ</rt></ruby>。<ruby>前<rt>まえ</rt></ruby>のターンとは<ruby>関係<rt>かんけい</rt></ruby>ない</div>
+    <div class="options" data-key="rpg-attack">
+      <button class="option" data-value="rare" data-md="敵のこうげき：毎ターン独立に、確率1/4。前の結果は使わない"><span class="mark">✓</span><span class="label"><b>たまに</b></span></button>
+      <button class="option" data-value="sometimes" data-md="敵のこうげき：毎ターン独立に、確率1/3。前の結果は使わない"><span class="mark">✓</span><span class="label"><b>ときどき</b></span></button>
+      <button class="option" data-value="often" data-md="敵のこうげき：毎ターン独立に、確率1/2。前の結果は使わない"><span class="mark">✓</span><span class="label"><b>よく</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="rpg-boss" data-genres="rpg">
+    <div class="qtitle">ボスは？</div><div class="qsub">いちばん<ruby>最後<rt>さいご</rt></ruby>に<ruby>出<rt>で</rt></ruby>てくる</div>
+    <div class="options" data-key="rpg-boss">
+      <button class="option" data-value="yes" data-md="ボス：いる。敵の数には含めない。選んだ数を倒したあと、追加で1体出る。これを倒したらクリア"><span class="mark">✓</span><span class="label"><b>いる</b></span></button>
+      <button class="option" data-value="no" data-md="ボス：いない。ボスは出さない。選んだ敵をすべて倒したらクリア"><span class="mark">✓</span><span class="label"><b>いない</b></span></button>
+    </div>
+  </section>
+
+  <section class="section genre-question" data-q="board-type" data-genres="board">
+    <div class="qtitle">どんな<ruby>遊<rt>あそ</rt></ruby>び？</div><div class="qsub"><ruby>2人<rt>ふたり</rt></ruby>で<ruby>交互<rt>こうご</rt></ruby>に<ruby>遊<rt>あそ</rt></ruby>ぶよ</div>
+    <div class="options" data-key="board-type">
+      <button class="option" data-value="marubatsu" data-md="ボードゲーム：2人用まるばつ（三目並べ）。3×3のマスに○と×を交互に置く。3つそろえたら勝ち。そろえかたはななめの質問に従う。ひきわけは質問に従う。"><span class="mark">✓</span><span class="label"><b>まるばつ</b><small>3つそろえる</small></span></button>
+      <button class="option" data-value="memory" data-md="ボードゲーム：2人用神経衰弱。カードを2枚めくり、同じ絵なら取る。表と裏は質問のPNGを貼る。全部のカードが取られたら、取った枚数が多い方が勝ち。同じ枚数ならひきわけ。"><span class="mark">✓</span><span class="label"><b><ruby>神経衰弱<rt>しんけいすいじゃく</rt></ruby></b><small><ruby>同<rt>おな</rt></ruby>じ<ruby>絵<rt>え</rt></ruby>をそろえる</small></span></button>
+      <button class="option" data-value="othello" data-md="ボードゲーム：2人用オセロ。交互に石を置く。相手の石をはさむと裏返す。最初は中央に2色ずつ置く。置ける場所がなければパス。置けなくなったら、石の多い方が勝ち。"><span class="mark">✓</span><span class="label"><b>オセロ</b><small><ruby>石<rt>いし</rt></ruby>ではさむ</small></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="board-next-1" data-genres="board" data-board-types="pending">
+    <div class="qtitle"><ruby>次<rt>つぎ</rt></ruby>の<ruby>質問<rt>しつもん</rt></ruby></div>
+    <div class="qsub">「どんな<ruby>遊<rt>あそ</rt></ruby>び？」を<ruby>選<rt>えら</rt></ruby>ぶと<ruby>出<rt>で</rt></ruby>るよ</div>
+  </section>
+  <section class="section genre-question" data-q="board-next-2" data-genres="board" data-board-types="pending">
+    <div class="qtitle">その<ruby>次<rt>つぎ</rt></ruby>の<ruby>質問<rt>しつもん</rt></ruby></div>
+    <div class="qsub">「どんな<ruby>遊<rt>あそ</rt></ruby>び？」を<ruby>選<rt>えら</rt></ruby>ぶと<ruby>出<rt>で</rt></ruby>るよ</div>
+  </section>
+  <section class="section genre-question" data-q="board-diagonal" data-genres="board" data-board-types="marubatsu">
+    <div class="qtitle">ななめは？</div><div class="qsub">3つそろう<ruby>方向<rt>ほうこう</rt></ruby></div>
+    <div class="options" data-key="board-diagonal">
+      <button class="option" data-value="yes" data-md="まるばつ：たて・よこ・ななめの3つで勝ち。3×3。2人用。"><span class="mark">✓</span><span class="label"><b>あり</b></span></button>
+      <button class="option" data-value="no" data-md="まるばつ：たて・よこだけ。ななめは勝ちにしない。3×3。2人用。"><span class="mark">✓</span><span class="label"><b>なし</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="board-draw" data-genres="board" data-board-types="marubatsu">
+    <div class="qtitle"><ruby>引<rt>ひ</rt></ruby>き<ruby>分<rt>わ</rt></ruby>けは？</div><div class="qsub"><ruby>盤<rt>ばん</rt></ruby>が<ruby>埋<rt>う</rt></ruby>まって、3つそろわなかったとき</div>
+    <div class="options" data-key="board-draw">
+      <button class="option" data-value="end" data-md="ひきわけ：盤が埋まって3つそろわなければ、ひきわけで終わる。もう一度は並べない。3×3。2人用。"><span class="mark">✓</span><span class="label"><b><ruby>終<rt>お</rt></ruby>わり</b></span></button>
+      <button class="option" data-value="retry" data-md="ひきわけ：盤が埋まって3つそろわなければ、並べ直す。3×3。2人用。"><span class="mark">✓</span><span class="label"><b>もう<ruby>一度<rt>いちど</rt></ruby></b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="board-size" data-genres="board" data-board-types="othello">
+    <div class="qtitle"><ruby>盤<rt>ばん</rt></ruby>の<ruby>大<rt>おお</rt></ruby>きさは？</div><div class="qsub"><ruby>2人<rt>ふたり</rt></ruby>で<ruby>交互<rt>こうご</rt></ruby>に<ruby>置<rt>お</rt></ruby>くよ</div>
+    <div class="options" data-key="board-size">
+      <button class="option" data-value="six" data-md="オセロの盤面は6×6。2人用。"><span class="mark">✓</span><span class="label"><b>6×6</b><small><ruby>早<rt>はや</rt></ruby>く<ruby>終<rt>お</rt></ruby>わる</small></span></button>
+      <button class="option" data-value="eight" data-md="オセロの盤面は8×8。2人用。"><span class="mark">✓</span><span class="label"><b>8×8</b><small>ふつうのオセロ</small></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="board-hint" data-genres="board" data-board-types="othello">
+    <div class="qtitle"><ruby>置<rt>お</rt></ruby>ける<ruby>場所<rt>ばしょ</rt></ruby>は？</div><div class="qsub"><ruby>置<rt>お</rt></ruby>けるマスの<ruby>案内<rt>あんない</rt></ruby></div>
+    <div class="options" data-key="board-hint">
+      <button class="option" data-value="show" data-md="置ける場所：光らせて教える。合法手だけ置ける。2人用オセロ。"><span class="mark">✓</span><span class="label"><b><ruby>光<rt>ひか</rt></ruby>って<ruby>教<rt>おし</rt></ruby>える</b></span></button>
+      <button class="option" data-value="hide" data-md="置ける場所：自分で考える。置けない場所は置けない。2人用オセロ。"><span class="mark">✓</span><span class="label"><b><ruby>自分<rt>じぶん</rt></ruby>で<ruby>考<rt>かんが</rt></ruby>える</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="board-pairs" data-genres="board" data-board-types="memory">
+    <div class="qtitle">カードは<ruby>何<rt>なん</rt></ruby><ruby>組<rt>くみ</rt></ruby>？</div><div class="qsub"><ruby>同<rt>おな</rt></ruby>じ<ruby>絵<rt>え</rt></ruby>のペアの<ruby>数<rt>かず</rt></ruby></div>
+    <div class="options" data-key="board-pairs">
+      <button class="option" data-value="four" data-md="神経衰弱：4組（8枚）。2人で2枚めくる。"><span class="mark">✓</span><span class="label"><b>4<ruby>組<rt>くみ</rt></ruby></b><small>8<ruby>枚<rt>まい</rt></ruby></small></span></button>
+      <button class="option" data-value="six" data-md="神経衰弱：6組（12枚）。2人で2枚めくる。"><span class="mark">✓</span><span class="label"><b>6<ruby>組<rt>くみ</rt></ruby></b><small>12<ruby>枚<rt>まい</rt></ruby></small></span></button>
+      <button class="option" data-value="eight" data-md="神経衰弱：8組（16枚）。2人で2枚めくる。"><span class="mark">✓</span><span class="label"><b>8<ruby>組<rt>くみ</rt></ruby></b><small>16<ruby>枚<rt>まい</rt></ruby></small></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="board-picture" data-genres="board" data-board-types="memory">
+    <div class="qtitle">カードの<ruby>絵<rt>え</rt></ruby>は？</div><div class="qsub">トランプか、イラスト</div>
+    <div class="options" data-key="board-picture">
+      <button class="option" data-value="hearts" data-md="カードの絵：トランプのハート。表は game-assets/board/cards/hearts/ からランダムに、組数のぶんだけ使う。同じ画像を2枚。裏は game-assets/board/cards/cardBack_red5.png。HTMLからの相対パスで読む。PNGの中身は埋め込まない。"><span class="mark">✓</span><span class="label"><b>トランプのハート</b></span></button>
+      <button class="option" data-value="spades" data-md="カードの絵：トランプのスペード。表は game-assets/board/cards/spades/ からランダムに、組数のぶんだけ使う。同じ画像を2枚。裏は game-assets/board/cards/cardBack_blue5.png。HTMLからの相対パスで読む。PNGの中身は埋め込まない。"><span class="mark">✓</span><span class="label"><b>トランプのスペード</b></span></button>
+      <button class="option" data-value="piece" data-md="カードの絵：イラスト。表の形は game-assets/board/cards/pieces/ からランダムに、組数のぶんだけ使う。同じ画像を2枚。枠は game-assets/board/cards/cardPlain.png を使いピースはその中央に載せる。裏は game-assets/board/cards/cardBack_green3.png。HTMLからの相対パスで読む。PNGの中身は埋め込まない。"><span class="mark">✓</span><span class="label"><b>イラスト</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="board-first" data-genres="board">
+    <div class="qtitle">どっちが<ruby>先<rt>さき</rt></ruby>？</div><div class="qsub"><ruby>最初<rt>さいしょ</rt></ruby>の<ruby>番<rt>ばん</rt></ruby></div>
+    <div class="options" data-key="board-first">
+      <button class="option" data-value="hero" data-md="先の番：主人公（左）から始める。もう一度遊ぶときも主人公から。2人用。"><span class="mark">✓</span><span class="label"><b><ruby>主人公<rt>しゅじんこう</rt></ruby>から</b></span></button>
+      <button class="option" data-value="enemy" data-md="先の番：相手（右）から始める。もう一度遊ぶときも相手から。2人用。"><span class="mark">✓</span><span class="label"><b><ruby>相手<rt>あいて</rt></ruby>から</b></span></button>
+      <button class="option" data-value="random" data-md="先の番：遊ぶたびにランダムで決める。決まった番を最初に大きく出す。2人用。"><span class="mark">✓</span><span class="label"><b>ランダム</b><small><ruby>遊<rt>あそ</rt></ruby>ぶたびに<ruby>決<rt>き</rt></ruby>める</small></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="board-color" data-genres="board">
+    <div class="qtitle"><ruby>盤<rt>ばん</rt></ruby>の<ruby>色<rt>いろ</rt></ruby>は？</div><div class="qsub">マスやカードを<ruby>置<rt>お</rt></ruby>く<ruby>台<rt>だい</rt></ruby></div>
+    <div class="options" data-key="board-color">
+      <button class="option" data-value="green" data-md="盤の色：緑（#3a9d5d）。盤（まるばつのマス、オセロの盤、神経衰弱のカードを並べる台）をこの色で塗る。マスの線は盤より暗い色。"><span class="mark">✓</span><span class="label"><b><ruby>緑<rt>みどり</rt></ruby></b></span></button>
+      <button class="option" data-value="wood" data-md="盤の色：木の色（#c8955a）。盤（まるばつのマス、オセロの盤、神経衰弱のカードを並べる台）をこの色で塗る。マスの線は盤より暗い色。"><span class="mark">✓</span><span class="label"><b><ruby>木<rt>き</rt></ruby>の<ruby>色<rt>いろ</rt></ruby></b></span></button>
+      <button class="option" data-value="blue" data-md="盤の色：青（#3b82c4）。盤（まるばつのマス、オセロの盤、神経衰弱のカードを並べる台）をこの色で塗る。マスの線は盤より暗い色。"><span class="mark">✓</span><span class="label"><b><ruby>青<rt>あお</rt></ruby></b></span></button>
+      <button class="option" data-value="pink" data-md="盤の色：ピンク（#f2a7c3）。盤（まるばつのマス、オセロの盤、神経衰弱のカードを並べる台）をこの色で塗る。マスの線は盤より暗い色。"><span class="mark">✓</span><span class="label"><b>ピンク</b></span></button>
+    </div>
+  </section>
+
+  <section class="section genre-question" data-q="puzzle-type" data-genres="puzzle">
+    <div class="qtitle">どんなパズル？</div><div class="qsub">パズルの<ruby>種類<rt>しゅるい</rt></ruby></div>
+    <div class="options" data-key="puzzle-type">
+      <button class="option" data-value="tetris" data-md="パズル：テトリス。落ちてくるブロックを並べて横一列を消す。盤の幅は10マス。5列消したらクリア。次のブロックは1つだけ先読み。ホールドは作らない。盤全体を1画面。カメラは作らない。点数は消した列の数"><span class="mark">✓</span><span class="label"><b>テトリス</b></span></button>
+      <button class="option" data-value="same" data-md="パズル：セイムゲーム。同じ色が2つ以上つながっているところをタッチして消す。入れ替えて3つそろえるマッチ3にはしない。盤は8×8。色は4。消えたところは上から落ちる。消せるところがなくなったら終わり。残りのマスがやさしい12こ以下、ふつう8こ以下、むずかしい4こ以下ならクリア。それより多ければゲームオーバー。画面に残りのマスの数を出す。マウスでクリックして消せる。矢印キーとEnterでも消せる。盤全体を1画面。カメラは作らない。点数は消したマスの数"><span class="mark">✓</span><span class="label"><b>セイムゲーム</b><small><ruby>同<rt>おな</rt></ruby>じ<ruby>色<rt>いろ</rt></ruby>をまとめて<ruby>消<rt>け</rt></ruby>す</small></span></button>
+      <button class="option" data-value="maze" data-md="パズル：迷路。主人公をマスを1つずつ動かしてゴールを目指す。盤はやさしい9×9、ふつう11×11、むずかしい13×13。分かれ道を3つ以上、行き止まりを3つ以上作る。一本道にしない。ゴールまでの最短の道はやさしいでも25歩以上。スタートは左下、ゴールは右上。ゴールに着いたらクリア。盤全体を1画面。広いマップやカメラは作らない。主人公の絵は、主人公の質問に書いたPNGを貼る。点数は歩数"><span class="mark">✓</span><span class="label"><b><ruby>迷路<rt>めいろ</rt></ruby></b></span></button>
+      <button class="option" data-value="slide" data-md="パズル：スライドパズル。タイルを動かして正しい順番にする。盤は3×3。空きマスは1つ。はじめの並びは、完成した盤から空きマスをランダムに動かして混ぜる（かならず解ける）。混ぜる回数はやさしい15回、ふつう30回、むずかしい60回。盤を完成したらクリア。タイルはマウスでクリックして動かせる。矢印キーでも動かせる。盤全体を1画面。カメラは作らない。点数は動かした回数"><span class="mark">✓</span><span class="label"><b>スライドパズル</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="puzzle-hint" data-genres="puzzle">
+    <div class="qtitle">ヒントは？</div><div class="qsub">つぎにできることを<ruby>光<rt>ひか</rt></ruby>らせる</div>
+    <div class="options" data-key="puzzle-hint">
+      <button class="option" data-value="show" data-md="ヒント：光らせて教える。テトリスは落ちる位置に薄いブロックを出す。セイムは消せるマス、迷路は進めるマス、スライドは動けるタイルを光らせる。置けない操作は受け付けない"><span class="mark">✓</span><span class="label"><b><ruby>光<rt>ひか</rt></ruby>って<ruby>教<rt>おし</rt></ruby>える</b></span></button>
+      <button class="option" data-value="hide" data-md="ヒント：自分で考える。光らせない。テトリスの薄いブロックも出さない。置けない操作は受け付けない"><span class="mark">✓</span><span class="label"><b><ruby>自分<rt>じぶん</rt></ruby>で<ruby>考<rt>かんが</rt></ruby>える</b></span></button>
+    </div>
+  </section>
+  <section class="section genre-question" data-q="puzzle-time" data-genres="puzzle">
+    <div class="qtitle"><ruby>時間制限<rt>じかんせいげん</rt></ruby>は？</div><div class="qsub"><ruby>制限時間<rt>せいげんじかん</rt></ruby></div>
+    <div class="options" data-key="puzzle-time">
+      <button class="option" data-value="none" data-md="制限時間：なし。自分のペースで考える"><span class="mark">✓</span><span class="label"><b>なし</b></span></button>
+      <button class="option" data-value="limit" data-md="制限時間：あり。カウントダウンが0になるとゲームオーバー。秒数は難易度に合わせる。やさしいは90秒、ふつうは60秒、むずかしいは45秒"><span class="mark">✓</span><span class="label"><b>あり</b></span></button>
+    </div>
+  </section>
+
+  <section class="section" data-q="lives">
+    <div class="qtitle">ハートはいくつ？</div>
+    <div class="qsub">やられたときの<ruby>残<rt>のこ</rt></ruby>り</div>
+    <div class="options" data-key="lives">
+      <button class="option" data-value="one" data-md="ライフ：ハート1つ。敵や障害物に1回当たったらゲームオーバー。画面にハートを表示する"><span class="mark">✓</span><span class="label"><b>1<ruby>個<rt>こ</rt></ruby></b></span></button>
+      <button class="option" data-value="three" data-md="ライフ：ハート3つ。当たるたびに1つ減り、0になったらゲームオーバー。画面にハートを表示する"><span class="mark">✓</span><span class="label"><b>3<ruby>個<rt>こ</rt></ruby></b></span></button>
+      <button class="option" data-value="none" data-md="ライフ：なし。ミスしてもゲームオーバーにしない。ハート表示は作らない。ほかの質問に「ハートが1つ減る」「0で負け」と書いてあっても、ハートなしを優先する。敵や障害物に当たったときは少し点滅して、そのまま続ける"><span class="mark">✓</span><span class="label"><b>なし</b><small>ミスしても<ruby>続<rt>つづ</rt></ruby>ける</small></span></button>
+    </div>
+  </section>
+
+  <section class="section" data-q="score">
+    <div class="qtitle"><ruby>点数<rt>てんすう</rt></ruby>は？</div>
+    <div class="qsub"><ruby>画面<rt>がめん</rt></ruby>の<ruby>点数<rt>てんすう</rt></ruby></div>
+    <div class="options" data-key="score">
+      <button class="option" data-value="yes" data-md="スコア：画面に点数を表示する。点数の足し方はジャンルの仕様に従う。ジャンルがアイテムは置かないと書いてあるときは、アイテムを出さない"><span class="mark">✓</span><span class="label"><b><ruby>数<rt>かぞ</rt></ruby>える</b></span></button>
+      <button class="option" data-value="no" data-md="スコア：点数は表示しない。勝敗やクリアだけで終わる"><span class="mark">✓</span><span class="label"><b>いらない</b></span></button>
+    </div>
+  </section>
+
+  <section class="section" data-q="final">
+    <div class="qtitle"><ruby>難易度<rt>なんいど</rt></ruby>は？</div>
+    <div class="qsub">ゲーム<ruby>全体<rt>ぜんたい</rt></ruby>の<ruby>遊<rt>あそ</rt></ruby>びやすさ</div>
+    <div class="options" data-key="difficulty">
+      <button class="option" data-value="easy" data-md="難易度：やさしい。速度・敵の数・制限時間などをゆるめにする"><span class="mark">✓</span><span class="label"><b>やさしい</b></span></button>
+      <button class="option" data-value="normal" data-md="難易度：ふつう。標準的な速度・敵数・制限時間にする"><span class="mark">✓</span><span class="label"><b>ふつう</b></span></button>
+      <button class="option" data-value="hard" data-md="難易度：むずかしい。速度・敵数・判定などを厳しくする"><span class="mark">✓</span><span class="label"><b><ruby>難<rt>むずか</rt></ruby>しい</b></span></button>
+    </div>
+  </section>
+  <!-- END -->
+  <section class="section" id="s-end">
+    <h1 id="endTitle"><ruby>宝箱<rt>たからばこ</rt></ruby>を<ruby>見<rt>み</rt></ruby>つけたよ！</h1>
+    <textarea id="preview" readonly spellcheck="false"></textarea>
+    <div class="end-found">
+      <div class="end-chest-wrap"><img class="end-chest" src="image/contents/icon_takarabako.png" alt=""></div>
+      <div id="missing"></div>
+      <div class="end-actions">
+        <button class="btn btn-save" id="makeFileBtn" onclick="createFile()">
+          <span class="end-label">
+            <img src="image/contents/icon_dl.png" alt="">
+            <span class="end-copy"><ruby>宝箱<rt>たからばこ</rt></ruby>を<ruby>保存<rt>ほぞん</rt></ruby>する</span>
+          </span>
+        </button>
+        <button class="btn btn-home" onclick="resetQuiz()">
+          <span class="end-label">
+            <img src="image/contents/icon_home.png" alt="">
+            <span class="end-copy"><ruby>次<rt>つぎ</rt></ruby>の<ruby>冒険<rt>ぼうけん</rt></ruby>へ</span>
+          </span>
+        </button>
+        <p id="saveNote" hidden><ruby>保存<rt>ほぞん</rt></ruby>したよ！ ファイルの<ruby>名前<rt>なまえ</rt></ruby>は AGENTS.md</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- live build log (signature element) -->
+<div id="logpanel" class="collapsed">
+  <div class="logbar" id="logbar" title="クリックで開閉">
+    <img class="fab-off" src="image/contents/btn_FAB_off.png" alt="冒険記録">
+    <img class="fab-on" src="image/contents/btn_FAB_on.png" alt="とじる">
+    <span id="logtitle"><ruby>冒険記録<rt>ぼうけんきろく</rt></ruby></span>
+    <span class="dot3"><span></span><span></span><span></span></span>
+  </div>
+  <div id="logbody"><span class="lg-empty">ステージを<ruby>進<rt>すす</rt></ruby>むたびに、<ruby>日記<rt>にっき</rt></ruby>が<ruby>増<rt>ふ</rt></ruby>えていくよ</span></div>
+</div>
+
+<script>
+  const ICONS = {
+    "genre:action":"⚔️","genre:shooting":"🚀","genre:runner":"🏃","genre:racing":"🏎️",
+    "genre:rpg":"🛡️","genre:board":"♟️","genre:puzzle":"🧩",
+    "racing-car:blue":"🔵","racing-car:red":"🔴","racing-car:green":"🟢",
+    "shooting-ship:blue":"🔵","shooting-ship:red":"🔴","shooting-ship:green":"🟢",
+    "hero:boy":"👦","hero:girl":"👧","hero:robot":"🤖","hero:monster":"👾",
+    "world:nature":"🌲","world:snow":"🏔️","world:desert":"🌵","world:volcano":"🌋","world:fantasy":"🏰","world:scifi":"🌌",
+    "action-view:horizontal":"➡️","action-view:vertical":"⬆️","action-view:fixed":"⬜",
+    "action-attack:sword":"⚔️","action-attack:stomp":"👟","action-attack:none":"🚫",
+    "action-enemy:none":"🌿","action-enemy:obstacle":"🔺","action-enemy:walk":"➡️","action-enemy:patrol":"👀",
+    "action-goal:flag":"🏁","action-goal:gem":"💎","action-goal:star":"⭐",
+    "shooting-view:vertical":"⬆️","shooting-view:horizontal":"➡️","shooting-view:fixed":"⬜",
+    "shooting-move:fourway":"➕","shooting-move:horizontal":"↔️","shooting-move:vertical":"↕️",
+    "shooting-fire:tap":"👆","shooting-fire:auto":"🔁",
+    "shooting-enemy:waves":"🌊","shooting-enemy:random":"🎲",
+    "runner-view:run":"➡️","runner-view:fall":"⬇️",
+    "runner-jump:jump":"⬆️","runner-jump:double":"⏫","runner-jump:none":"🚫",
+    "runner-obstacle:spike":"🔺","runner-obstacle:hole":"🕳️","runner-obstacle:enemy":"👾","runner-obstacle:mixed":"🎲",
+    "runner-goal-run:flag":"🏁","runner-goal-run:survive":"⏳",
+    "runner-fall-move:side":"↔️","runner-fall-move:jump":"⬆️",
+    "runner-fall-hazard:spike":"🔺","runner-fall-hazard:enemy":"👾","runner-fall-hazard:platform":"🟩","runner-fall-hazard:mixed":"🎲",
+    "runner-goal-fall:flag":"🏁","runner-goal-fall:survive":"⏳",
+    "racing-shape:straight":"⬆️","racing-shape:curvy":"〰️",
+    "racing-course:short":"⏱️","racing-course:long":"🛤️","racing-course:laps":"3️⃣",
+    "racing-obstacle:none":"🛣️","racing-obstacle:cone":"🔶","racing-obstacle:tires":"🛞","racing-obstacle:oil":"🛢️","racing-obstacle:dash":"⏫","racing-obstacle:mixed":"🎲",
+    "racing-rival:one":"🚗","racing-rival:three":"🚙","racing-rival:seven":"🏁",
+    "rpg-command:fight":"⚔️","rpg-command:magic":"✨",
+    "rpg-enemy:one":"👾","rpg-enemy:two":"👥","rpg-enemy:series":"🔁",
+    "rpg-boss:yes":"🐉","rpg-boss:no":"🚫",
+    "rpg-attack:rare":"🌙","rpg-attack:sometimes":"🎲","rpg-attack:often":"💥",
+    "board-type:marubatsu":"❌","board-type:memory":"🃏","board-type:othello":"⚫",
+    "board-size:six":"6️⃣","board-size:eight":"8️⃣",
+    "board-hint:show":"💡","board-hint:hide":"🤔",
+    "board-pairs:four":"4️⃣","board-pairs:six":"6️⃣","board-pairs:eight":"8️⃣",
+    "board-picture:hearts":"♥️","board-picture:spades":"♠️","board-picture:piece":"🔶",
+    "board-diagonal:yes":"↗️","board-diagonal:no":"➖",
+    "board-draw:end":"🏁","board-draw:retry":"🔁",
+    "board-first:hero":"👈","board-first:enemy":"👉","board-first:random":"🎲",
+    "board-color:green":"🟩","board-color:wood":"🟫","board-color:blue":"🟦","board-color:pink":"🩷",
+    "puzzle-type:tetris":"🧱","puzzle-type:same":"🟦","puzzle-type:maze":"🌀","puzzle-type:slide":"🔳",
+    "puzzle-hint:show":"💡","puzzle-hint:hide":"🤔",
+    "puzzle-time:none":"⏳","puzzle-time:limit":"⏰",
+    "lives:one":"❤️","lives:three":"💖","lives:none":"🤍",
+    "score:yes":"🏆","score:no":"🚫",
+    "difficulty:easy":"🌱","difficulty:normal":"⭐","difficulty:hard":"🔥"
+  };
+
+  function applyIcons(){
+    document.querySelectorAll('.options').forEach(function(group){
+      const key = group.dataset.key;
+      group.querySelectorAll('.option').forEach(function(btn){
+        const ico = ICONS[key + ':' + btn.dataset.value] || '⭐';
+        let el = btn.querySelector('.ico, .mark');
+        if(!el){
+          el = document.createElement('span');
+          btn.insertBefore(el, btn.firstChild);
+        }
+        el.className = 'ico';
+        el.textContent = ico;
+      });
+    });
+  }
+  // 主人公の画像。選んだタイプの中からランダムに1つ使う
+  const HERO_SETS = {
+    boy:[
+      {dir:"boy1", name:"character_maleAdventurer"},
+      {dir:"boy2", name:"character_malePerson"}
+    ],
+    girl:[
+      {dir:"girl1", name:"character_femaleAdventurer"},
+      {dir:"girl2", name:"character_femalePerson"}
+    ],
+    robot:[
+      {dir:"robot", name:"character_robot"}
+    ],
+    monster:[
+      {dir:"monster/green", name:"character_green"},
+      {dir:"monster/pink", name:"character_pink"},
+      {dir:"monster/purple", name:"character_purple"},
+      {dir:"monster/zombie", name:"character_zombie"}
+    ]
+  };
+
+  function randomOf(list){
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  // アクション・ランナーの敵。game-assets/_common/action_enemies の、歩く敵と飛ぶ敵
+  const WALK_ENEMIES = ["slime_normal","slime_fire","slime_spike","slime_block","ladybug","mouse","snail"];
+  const FLY_ENEMIES = [
+    {name:"bee", a:"bee_a", b:"bee_b"},
+    {name:"fly", a:"fly_a", b:"fly_b"}
+  ];
+
+  // 神経衰弱の表の絵。フォームで8枚をランダムに選び、ゲームでは前から組数のぶんだけ使う
+  const CARD_FACES = {"hearts": ["cardHearts10.png", "cardHearts2.png", "cardHearts3.png", "cardHearts4.png", "cardHearts5.png", "cardHearts6.png", "cardHearts7.png", "cardHearts8.png", "cardHearts9.png", "cardHeartsA.png", "cardHeartsJ.png", "cardHeartsK.png", "cardHeartsQ.png"], "spades": ["cardSpades10.png", "cardSpades2.png", "cardSpades3.png", "cardSpades4.png", "cardSpades5.png", "cardSpades6.png", "cardSpades7.png", "cardSpades8.png", "cardSpades9.png", "cardSpadesA.png", "cardSpadesJ.png", "cardSpadesK.png", "cardSpadesQ.png"], "piece": ["pieceYellow_border01.png", "pieceYellow_border02.png", "pieceYellow_border04.png", "pieceYellow_border05.png", "pieceYellow_border06.png", "pieceYellow_border09.png", "pieceYellow_border11.png", "pieceYellow_border12.png", "pieceYellow_border13.png", "pieceYellow_border14.png", "pieceYellow_border15.png", "pieceYellow_border17.png"]};
+  function pickCards(kind){
+    const list = (CARD_FACES[kind] || []).slice();
+    for(let i = list.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); const t = list[i]; list[i] = list[j]; list[j] = t; }
+    return list.slice(0, 8);
+  }
+
+  // 画像の大きさ（幅×高さ px）。game-assets のPNGを測って作った表。キーが大きさ、値がファイル名（.png なし）
+  // 画像を足したり変えたりしたら、この表も作り直す
+  const IMG_SIZES = {
+    "64×64":"bee_a bee_b block_empty bricks_grey cloud_background cloud_left cloud_mid cloud_right cloud_single coin digit_0 digit_1 digit_2 digit_3 digit_4 digit_5 digit_6 digit_7 digit_8 digit_9 flag_red_a float_left float_mid float_overhang_left float_overhang_right float_right float_single fly_a fly_b gem_yellow ground_bottom ground_bottom_left ground_bottom_right ground_center ground_left ground_right ground_top ground_top_left ground_top_right hud_heart hud_heart_empty ladybug_walk_a ladybug_walk_b mouse_walk_a mouse_walk_b pieceYellow_border01 pieceYellow_border02 pieceYellow_border04 pieceYellow_border05 pieceYellow_border06 pieceYellow_border09 pieceYellow_border11 pieceYellow_border12 pieceYellow_border13 pieceYellow_border14 pieceYellow_border15 pieceYellow_border17 slime_block_walk_a slime_block_walk_b slime_fire_walk_a slime_fire_walk_b slime_normal_walk_a slime_normal_walk_b slime_spike_walk_a slime_spike_walk_b snail_walk_a snail_walk_b spikes spring spring_out star times vertical_bottom vertical_mid vertical_top",
+    "256×256":"lv1_blue_01 lv1_blue_02 lv1_blue_03 lv1_blue_04 lv1_blue_05 lv1_dark_01 lv1_dark_02 lv1_dark_03 lv1_dark_04 lv1_dark_05 lv1_green_01 lv1_green_02 lv1_green_03 lv1_green_04 lv1_green_05 lv1_red_01 lv1_red_02 lv1_red_03 lv1_red_04 lv1_red_05 lv1_white_01 lv1_white_02 lv1_white_03 lv1_white_04 lv1_white_05 lv1_yellow_01 lv1_yellow_02 lv1_yellow_03 lv1_yellow_04 lv1_yellow_05 lv2_blue_01 lv2_blue_02 lv2_blue_03 lv2_blue_04 lv2_blue_05 lv2_dark_01 lv2_dark_02 lv2_dark_03 lv2_dark_04 lv2_dark_05 lv2_green_01 lv2_green_02 lv2_green_03 lv2_green_04 lv2_green_05 lv2_red_01 lv2_red_02 lv2_red_03 lv2_red_04 lv2_red_05 lv2_white_01 lv2_white_02 lv2_white_03 lv2_white_04 lv2_white_05 lv2_yellow_01 lv2_yellow_02 lv2_yellow_03 lv2_yellow_04 lv2_yellow_05",
+    "140×190":"cardBack_blue5 cardBack_green3 cardBack_red5 cardClubs10 cardClubs2 cardClubs3 cardClubs4 cardClubs5 cardClubs6 cardClubs7 cardClubs8 cardClubs9 cardClubsA cardClubsJ cardClubsK cardClubsQ cardDiamonds10 cardDiamonds2 cardDiamonds3 cardDiamonds4 cardDiamonds5 cardDiamonds6 cardDiamonds7 cardDiamonds8 cardDiamonds9 cardDiamondsA cardDiamondsJ cardDiamondsK cardDiamondsQ cardHearts10 cardHearts2 cardHearts3 cardHearts4 cardHearts5 cardHearts6 cardHearts7 cardHearts8 cardHearts9 cardHeartsA cardHeartsJ cardHeartsK cardHeartsQ cardJoker cardPlain cardSpades10 cardSpades2 cardSpades3 cardSpades4 cardSpades5 cardSpades6 cardSpades7 cardSpades8 cardSpades9 cardSpadesA cardSpadesJ cardSpadesK cardSpadesQ",
+    "96×128":"character_femaleAdventurer_attack0 character_femaleAdventurer_hit character_femaleAdventurer_idle character_femaleAdventurer_jump character_femaleAdventurer_walk0 character_femaleAdventurer_walk1 character_femalePerson_attack0 character_femalePerson_hit character_femalePerson_idle character_femalePerson_jump character_femalePerson_walk0 character_femalePerson_walk1 character_maleAdventurer_attack0 character_maleAdventurer_hit character_maleAdventurer_idle character_maleAdventurer_jump character_maleAdventurer_walk0 character_maleAdventurer_walk1 character_malePerson_attack0 character_malePerson_hit character_malePerson_idle character_malePerson_jump character_malePerson_walk0 character_malePerson_walk1 character_robot_attack0 character_robot_hit character_robot_idle character_robot_jump character_robot_walk0 character_robot_walk1 character_zombie_attack0 character_zombie_hit character_zombie_idle character_zombie_jump character_zombie_walk0 character_zombie_walk1",
+    "128×128":"character_green_attack0 character_green_hit character_green_idle character_green_jump character_green_walk0 character_green_walk1 character_pink_attack0 character_pink_hit character_pink_idle character_pink_jump character_pink_walk0 character_pink_walk1 character_purple_attack0 character_purple_hit character_purple_idle character_purple_jump character_purple_walk0 character_purple_walk1 land_dirt12 land_grass04 land_sand12 road_asphalt21 road_asphalt22 road_asphalt23 road_asphalt69 road_asphalt70 road_asphalt71 same_green_diamond tent_blue tent_red tetris_blue tetris_green tetris_pink tetris_red tetris_white tetris_yellow",
+    "384×384":"boss_blue_01 boss_blue_02 boss_blue_03 boss_blue_04 boss_dark_01 boss_dark_02 boss_dark_03 boss_dark_04 boss_green_01 boss_green_02 boss_green_03 boss_green_04 boss_red_01 boss_red_02 boss_red_03 boss_red_04 boss_white_01 boss_white_02 boss_white_03 boss_white_04 boss_yellow_01 boss_yellow_02 boss_yellow_03 boss_yellow_04",
+    "960×540":"bg_far_A bg_far_B bg_far_C bg_far_D bg_far_E bg_mid bg_mid_A bg_mid_B bg_mid_C bg_mid_D bg_mid_E bg_mid_F bg_mid_G",
+    "70×131":"car_black_3 car_black_4 car_blue_3 car_blue_4 car_green_3 car_green_4 car_red_3 car_red_4 car_yellow_3 car_yellow_4",
+    "200×200":"bg_near_moon bg_near_planet02 bg_near_planet03 bg_near_planet05 bg_near_planet09 bg_near_sun",
+    "13×37":"bullet_blue_02 bullet_blue_03 bullet_green_01 bullet_green_04 bullet_red_02 bullet_red_03",
+    "71×131":"car_black_1 car_blue_1 car_green_1 car_red_1 car_yellow_1",
+    "71×116":"car_black_2 car_blue_2 car_green_2 car_red_2 car_yellow_2",
+    "70×121":"car_black_5 car_blue_5 car_green_5 car_red_5 car_yellow_5",
+    "93×84":"enemy_ship_black_01 enemy_ship_blue_01 enemy_ship_green_01 enemy_ship_red_01",
+    "104×84":"enemy_ship_black_02 enemy_ship_blue_02 enemy_ship_green_02 enemy_ship_red_02",
+    "103×84":"enemy_ship_black_03 enemy_ship_blue_03 enemy_ship_green_03 enemy_ship_red_03",
+    "82×84":"enemy_ship_black_04 enemy_ship_blue_04 enemy_ship_green_04 enemy_ship_red_04",
+    "97×84":"enemy_ship_black_05 enemy_ship_blue_05 enemy_ship_green_05 enemy_ship_red_05",
+    "9×54":"bullet_blue_01 bullet_green_03 bullet_red_01",
+    "9×37":"bullet_blue_04 bullet_green_05 bullet_red_04",
+    "13×54":"bullet_blue_05 bullet_green_02 bullet_red_05",
+    "99×75":"ship_blue_01 ship_green_01 ship_red_01",
+    "112×75":"ship_blue_02 ship_green_02 ship_red_02",
+    "98×75":"ship_blue_03 ship_green_03 ship_red_03",
+    "56×56":"tires_red tires_white",
+    "165×99":"arrow_yellow",
+    "46×44":"cone_down",
+    "45×44":"cone_straight",
+    "109×95":"oil",
+    "129×128":"same_blue_circle",
+    "130×118":"same_red_heart",
+    "129×120":"same_yellow_star",
+    "192×183":"spark_star",
+    "224×222":"spark_twinkle",
+    "70×70":"swordGold",
+    "188×88":"tetris_orange",
+    "214×212":"tree_large",
+    "141×141":"tree_small",
+    "448×223":"tribune_full"
+  };
+  const IMG_SIZE_OF = {};
+  Object.keys(IMG_SIZES).forEach(function(v){ IMG_SIZES[v].split(" ").forEach(function(n){ IMG_SIZE_OF[n + ".png"] = v; }); });
+
+  // 仕様に出てくるPNGの大きさを、大きさごとにまとめて書く。AIがフォルダを調べたり画像を測ったりしなくてよいように
+  function imageSizeSection(md){
+    const names = {};
+    (md.match(/[A-Za-z0-9_\-]+\.png/g) || []).forEach(function(n){ names[n] = 1; });
+    const by = {};
+    Object.keys(names).sort().forEach(function(n){ const v = IMG_SIZE_OF[n] || "?×?"; (by[v] = by[v] || []).push(n); });
+    const sizes = Object.keys(by);
+    if(!sizes.length) return "";
+    let t = "## 画像の大きさ\n";
+    t += "この仕様で使うPNGの大きさ（幅×高さ px）。使う画像のファイル名と大きさは、この仕様に全部書いてある。フォルダの中を一覧したり、画像を開いて大きさを測ったりしなくてよい。sound.js・bgm_songs.js・game-kit.js も開かなくてよい（使い方はこの仕様に書いてある）。表示の大きさが仕様に書いてあるものは、その大きさで貼る\n";
+    // いちばん多い 64×64 は名前を並べず、最後に1行だけ書く
+    sizes.filter(function(v){ return v !== "64×64"; }).sort(function(a, b){ return by[b].length - by[a].length; })
+      .forEach(function(v){ t += "- " + v + "：" + by[v].join("、") + "\n"; });
+    if(by["64×64"]) t += "- 上にないPNGは、すべて 64×64\n";
+    return t + "\n";
+  }
+
+  // 主人公と、ボードゲームの相手（主人公とちがうタイプ）と、アクション・ランナーの敵の画像を決める
+  function pickImages(type){
+    const hero = randomOf(HERO_SETS[type]);
+    let others = [];
+    Object.keys(HERO_SETS).forEach(function(t){
+      if(t !== type) others = others.concat(HERO_SETS[t]);
+    });
+    return {
+      hero: hero,
+      enemy: randomOf(others),
+      rpg: pickRpg(),
+      walker: randomOf(WALK_ENEMIES),
+      flier: randomOf(FLY_ENEMIES)
+    };
+  }
+
+  function heroIdlePath(set){
+    return "game-assets/_common/hero/" + set.dir + "/" + set.name + "_idle.png";
+  }
+
+  // 主人公のPNG。ジャンルで使う絵だけ書く
+  function heroImageLines(){
+    const img = answers.hero.images.hero;
+    const genre = selectedGenre();
+    const puzzle = answers["puzzle-type"] ? answers["puzzle-type"].value : null;
+    const f = function(s){ return img.name + "_" + s + ".png"; };
+    let poses = [];
+    let size = "";
+    if(genre === "action" || genre === "runner"){
+      poses.push("立ち：" + f("idle"));
+      poses.push("歩き：" + f("walk0") + " と " + f("walk1") + " を交互");
+      poses.push("ジャンプ：" + f("jump"));
+      poses.push("やられ：" + f("hit"));
+      if(genre === "action" && answers["action-attack"] && answers["action-attack"].value === "sword"){
+        poses.push("剣をふる：" + f("attack0") + "。剣は game-assets/_common/objects/swordGold.png（上向きの絵）を高さ64px前後で手元に重ね、ふる向きに回して貼る。剣の弧は短い図形で描く");
+      }
+      size = "絵は縮小せず、元の大きさ（高さ128px）で貼る。絵の上4分の1と左右はすき間なので、当たり判定は見えている体に合わせる。";
+    } else if(genre === "rpg"){
+      poses.push("立ち：" + f("idle"));
+      poses.push("こうげき：" + f("attack0"));
+      poses.push("やられ：" + f("hit"));
+      size = "表示する高さは160px前後。";
+    } else if(genre === "puzzle" && puzzle === "maze"){
+      poses.push("迷路の主人公：" + f("idle"));
+      size = "マス1つに収まる大きさで貼る。";
+    } else {
+      return "";
+    }
+    return "game-assets/_common/hero/" + img.dir + "/ の次のPNGを貼る。HTMLからの相対パスで読む。PNGの中身は埋め込まない。図形で描き直さない。\n"
+      + poses.map(function(p){ return "- " + p; }).join("\n") + "\n" + size;
+  }
+
+  // RPG の敵とボス。game-assets/rpg
+  // lv1＝レベル1の敵、lv2＝レベル2の敵、boss＝ボス。lv1 と lv2 からランダムに3体（ちがう絵）、ボスは1体。出てくる順は lv1 が先
+  const RPG_LV1 = ["lv1_blue_01","lv1_blue_02","lv1_blue_03","lv1_blue_04","lv1_blue_05","lv1_dark_01","lv1_dark_02","lv1_dark_03","lv1_dark_04","lv1_dark_05","lv1_green_01","lv1_green_02","lv1_green_03","lv1_green_04","lv1_green_05","lv1_red_01","lv1_red_02","lv1_red_03","lv1_red_04","lv1_red_05","lv1_white_01","lv1_white_02","lv1_white_03","lv1_white_04","lv1_white_05","lv1_yellow_01","lv1_yellow_02","lv1_yellow_03","lv1_yellow_04","lv1_yellow_05"];
+  const RPG_LV2 = ["lv2_blue_01","lv2_blue_02","lv2_blue_03","lv2_blue_04","lv2_blue_05","lv2_dark_01","lv2_dark_02","lv2_dark_03","lv2_dark_04","lv2_dark_05","lv2_green_01","lv2_green_02","lv2_green_03","lv2_green_04","lv2_green_05","lv2_red_01","lv2_red_02","lv2_red_03","lv2_red_04","lv2_red_05","lv2_white_01","lv2_white_02","lv2_white_03","lv2_white_04","lv2_white_05","lv2_yellow_01","lv2_yellow_02","lv2_yellow_03","lv2_yellow_04","lv2_yellow_05"];
+  const RPG_BOSSES = ["boss_blue_01","boss_blue_02","boss_blue_03","boss_blue_04","boss_dark_01","boss_dark_02","boss_dark_03","boss_dark_04","boss_green_01","boss_green_02","boss_green_03","boss_green_04","boss_red_01","boss_red_02","boss_red_03","boss_red_04","boss_white_01","boss_white_02","boss_white_03","boss_white_04","boss_yellow_01","boss_yellow_02","boss_yellow_03","boss_yellow_04"];
+
+  function pickRpg(){
+    const pool = RPG_LV1.map(function(n){ return {name:n, lv:1}; })
+      .concat(RPG_LV2.map(function(n){ return {name:n, lv:2}; }));
+    for(let i = pool.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+    }
+    return { enemies: pool.slice(0, 3), boss: randomOf(RPG_BOSSES) };
+  }
+
+  function rpgEnemyLines(){
+    const v = answers["rpg-enemy"].value;
+    const n = v === "one" ? 1 : v === "two" ? 2 : 3;
+    const list = answers.hero.images.rpg.enemies.slice(0, n);
+    list.sort(function(a, b){ return a.lv - b.lv; });   // レベル1の敵が先
+    let t = "敵の絵は game-assets/rpg/ の次のPNGを、この順に1体ずつ出す。HTMLからの相対パスで読む。PNGの中身は埋め込まない。図形で描き直さない。\n";
+    list.forEach(function(e, i){
+      t += "- " + (i + 1) + "体目：" + e.name + ".png（" + (e.lv === 1 ? "レベル1の敵" : "レベル2の敵") + "）\n";
+    });
+    return t + "レベル1の敵とレベル2の敵のHPは難易度の質問に書いてある。";
+  }
+
+  function rpgBossLines(){
+    const boss = answers.hero.images.rpg.boss;
+    let t = "";
+    if(answers["rpg-boss"].value === "yes"){
+      t += "ボスの絵は game-assets/rpg/" + boss + ".png。高さ240px前後で、敵より大きく出す。\n";
+    }
+    t += "レベル1の敵とレベル2の敵は高さ160px前後で、画面の右に置く。主人公は左。主人公と敵の足もとは y=330 より上にする（下は kit のコマンドとメッセージの枠）。モンスターは正面向きの絵なので、反転しない。\n";
+    t += "敵のこうげきは、敵が少し前に飛び出す動きで見せる。ダメージを受けたら点滅して少しゆれる。倒したら小さくなって消え、キラキラが飛ぶ。モンスターの絵は増やさない";
+    return t;
+  }
+
+  // シューティングの自機・敵・背景。game-assets/shooting
+  const SHIP_ENEMY_COLORS = ["black","blue","green","red"];   // 敵の宇宙船の色
+  // 弾は自機と同じ色。5枚からランダムに1つ
+  const SHIP_BULLETS = {
+    blue:["bullet_blue_01","bullet_blue_02","bullet_blue_03","bullet_blue_04","bullet_blue_05"],
+    green:["bullet_green_01","bullet_green_02","bullet_green_03","bullet_green_04","bullet_green_05"],
+    red:["bullet_red_01","bullet_red_02","bullet_red_03","bullet_red_04","bullet_red_05"]
+  };
+
+  // 自機は選んだ色で形を3つからランダム。弾は自機と同じ色。敵は自機と同じ色を除いた1色から2種類
+  function pickShipImages(color){
+    const enemyColor = randomOf(SHIP_ENEMY_COLORS.filter(function(c){ return c !== color; }));
+    const shapes = [1,2,3,4,5];
+    const a = shapes.splice(Math.floor(Math.random() * shapes.length), 1)[0];
+    const b = randomOf(shapes);
+    return {
+      ship: "ship_" + color + "_0" + randomOf([1,2,3]) + ".png",
+      shot: randomOf(SHIP_BULLETS[color]) + ".png",
+      enemies: ["enemy_ship_" + enemyColor + "_0" + a + ".png", "enemy_ship_" + enemyColor + "_0" + b + ".png"]
+    };
+  }
+
+  function shipImageLines(){
+    const imgs = answers["shooting-ship"].images;
+    const view = answers["shooting-view"] ? answers["shooting-view"].value : null;
+    const dir = "game-assets/shooting/";
+    let turn = "自機と弾は上向き、敵は下向きの絵なので、そのまま貼る。";
+    if(view === "horizontal") turn = "絵は自機と弾が上向き、敵が下向き。横スクロールなので、自機と弾は右向き、敵は左向きに回して貼る。";
+    const bg = "背景は、舞台の質問に書いた絵を使う。";
+    return "次のPNGを貼る。HTMLからの相対パスで読む。PNGの中身は埋め込まない。図形で描き直さない。\n"
+      + "- 自機：" + dir + "ships/" + imgs.ship + "\n"
+      + "- 弾：" + dir + "bullets/" + imgs.shot + "。1発ずつ飛ばす。画面をつらぬく長い光線にはしない\n"
+      + "- 敵：" + dir + "enemy_ships/" + imgs.enemies[0] + " と " + imgs.enemies[1] + "。出すたびにどちらかを選ぶ\n"
+      + turn + "自機も敵も、幅64px前後で表示する。当たり判定は絵より少し小さくする。弾の当たり判定は絵より少し太くして当てやすくする。\n"
+      + bg;
+  }
+
+  // レーシングの車。game-assets/racing/cars
+  // 自分は選んだ色で形を5つからランダム。相手は自分と別の色から、1台ずつちがう色
+  // 舞台の背景のレイヤー（game-assets/_common/world/<舞台>/）。遠景と近景は、候補からランダムに1つ
+  // レイヤーがまだない舞台は書かない（その舞台は背景を指定しない）
+  // near の null は「近景なし」
+  const WORLD_BG = {
+    scifi: {
+      far: ["bg_far_A.png", "bg_far_B.png", "bg_far_D.png", "bg_far_E.png"],
+      mid: ["bg_mid.png"],
+      near: ["bg_near_planet02.png", "bg_near_planet03.png", "bg_near_planet05.png", "bg_near_planet09.png"]
+    },
+    nature: {
+      far: ["bg_far_A.png", "bg_far_B.png", "bg_far_C.png", "bg_far_D.png"],
+      mid: ["bg_mid_B.png", "bg_mid_C.png", "bg_mid_D.png", "bg_mid_E.png"],
+      near: ["bg_near_sun.png", null]
+    },
+    fantasy: {
+      far: ["bg_far_A.png", "bg_far_B.png", "bg_far_C.png", "bg_far_D.png"],
+      mid: ["bg_mid_A.png", "bg_mid_B.png", "bg_mid_F.png", "bg_mid_G.png"],
+      near: ["bg_near_moon.png", null]
+    },
+    snow: {
+      far: ["bg_far_A.png", "bg_far_B.png", "bg_far_C.png", "bg_far_D.png"],
+      mid: ["bg_mid_A.png", "bg_mid_B.png", "bg_mid_C.png", "bg_mid_D.png"],
+      near: ["bg_near_sun.png", null]
+    },
+    desert: {
+      far: ["bg_far_A.png", "bg_far_B.png", "bg_far_C.png", "bg_far_D.png"],
+      mid: ["bg_mid_A.png", "bg_mid_B.png", "bg_mid_C.png", "bg_mid_D.png"],
+      near: ["bg_near_sun.png", null]
+    },
+    volcano: {
+      far: ["bg_far_A.png", "bg_far_B.png", "bg_far_C.png", "bg_far_D.png"],
+      mid: ["bg_mid_A.png", "bg_mid_B.png", "bg_mid_C.png", "bg_mid_D.png"],
+      near: [null]
+    }
+  };
+
+  function pickWorldBg(world){
+    const set = WORLD_BG[world];
+    if(!set) return null;
+    return { far: randomOf(set.far), mid: randomOf(set.mid), near: randomOf(set.near) };
+  }
+
+  // 背景は game-kit.js の kit.background で設定し、kit が描く。ジャンルで kit.scroll の渡し方が変わる
+  //   アクション・ランナー：世界が動いた量を渡す（画面固定なら渡さない）
+  //   シューティング：横スクロールは x を、縦スクロールは y を時間で動かす。画面固定は渡さない
+  //   RPG・ボードゲーム・パズル：画面が動かないので渡さない
+  //   レーシング：上から見る画面なので使わない
+  function worldBgLines(){
+    const bg = answers.world && answers.world.images;
+    const set = answers.world && WORLD_BG[answers.world.value];
+    const genre = selectedGenre();
+    if(!bg || !set || genre === "racing") return "";
+    const dir = "game-assets/_common/world/" + answers.world.value + "/";
+    let move = "画面が動くときは、世界が動いた量を毎フレーム kit.scroll(x, y) で渡す（右へ進むと x が増え、上へ進むと y が減る）。画面固定なら kit.scroll は呼ばない";
+    if(genre === "shooting"){
+      const view = answers["shooting-view"] ? answers["shooting-view"].value : null;
+      if(view === "horizontal") move = "背景は右から左へ流すので、毎フレーム kit.scroll(経過した秒数 × 流す速さ, 0) を渡す";
+      else if(view === "vertical") move = "背景は上から下へ流すので、毎フレーム kit.scroll(0, -(経過した秒数 × 流す速さ)) を渡す";
+      else move = "画面固定なので kit.scroll は呼ばない";
+    } else if(genre === "rpg" || genre === "board" || genre === "puzzle"){
+      move = "画面は動かないので kit.scroll は呼ばない";
+    }
+    return "\n背景は、ゲームの始めに1回だけ kit.background({far: \"" + dir + bg.far + "\", mid: \"" + dir + bg.mid + "\""
+      + (bg.near ? ", near: \"" + dir + bg.near + "\"" : "") + "}) で設定する。"
+      + "背景の絵は kit が奥から順に描くので、自分で描かない。図形で描き直さない。" + move;
+  }
+
+  function pickCarImages(color){
+    const others = ["black","blue","green","red","yellow"].filter(function(c){ return c !== color; });
+    // 相手は7台ぶん。ほかの4色を順にまわし、同じ絵が出ないようにする（3台のときは前の3台だけ使う）
+    const order = others.slice().sort(function(){ return Math.random() - 0.5; });
+    const used = {};
+    function car(c){
+      let n; do { n = "car_" + c + "_" + randomOf([1,2,3,4,5]) + ".png"; } while(used[n]);
+      used[n] = 1; return n;
+    }
+    const me = car(color);
+    const rivals = [];
+    for(let i = 0; i < 7; i++) rivals.push(car(order[i % order.length]));
+    return { me: me, rivals: rivals };
+  }
+
+  function carImageLines(){
+    const imgs = answers["racing-car"].images;
+    const rv = answers["racing-rival"] ? answers["racing-rival"].value : "three";
+    const n = rv === "seven" ? 7 : rv === "one" ? 1 : 3;
+    const dir = "game-assets/racing/cars/";
+    return "次のPNGを貼る。\n"
+      + "- 自分の車：" + dir + imgs.me + "\n"
+      + "- 相手の車（1台に1つ）：" + imgs.rivals.slice(0, n).join("、") + "（同じ " + dir + " にある）\n"
+      + "車の絵は上向き。回さずに、幅50px前後（縦横の比はそのまま）で貼る。";
+  }
+
+  // アクション・ランナーの敵のPNG。敵が出るときだけ書く
+  function enemyImageLine(key){
+    const v = answers[key] ? answers[key].value : null;
+    const imgs = answers.hero && answers.hero.images;
+    if(!imgs) return "";
+    let useWalk = false;
+    let useFly = false;
+    if(key === "action-enemy"){ useWalk = v === "patrol"; useFly = v === "fly"; }
+    if(key === "runner-obstacle") useWalk = v === "enemy" || v === "mixed";
+    if(key === "runner-fall-hazard") useFly = v === "enemy" || v === "mixed";
+    const dir = "game-assets/_common/action_enemies/";
+    if(useWalk){
+      return "\n敵の画像は " + dir + imgs.walker + "_walk_a.png と " + imgs.walker + "_walk_b.png を交互に貼る。敵は全部この1種類。HTMLからの相対パスで読む。PNGの中身は埋め込まない。図形で描き直さない。表示は64×64px。倒した敵は消す。";
+    }
+    if(useFly){
+      return "\n敵の画像は " + dir + imgs.flier.a + ".png と " + imgs.flier.b + ".png を交互に貼る。敵は全部この1種類。HTMLからの相対パスで読む。PNGの中身は埋め込まない。図形で描き直さない。表示は64×64px。" + (key === "action-enemy" ? "倒した敵は消す。" : "");
+    }
+    return "";
+  }
+
+  const COMMON_ORDER = ["genre","hero","world"];
+  const GENRE_ORDER = {
+    action:["action-view","action-attack","action-enemy","action-goal"],
+    shooting:["shooting-view","shooting-move","shooting-fire","shooting-enemy"],
+    runner:["runner-view","runner-jump","runner-obstacle","runner-goal-run","runner-fall-move","runner-fall-hazard","runner-goal-fall"],
+    racing:["racing-shape","racing-course","racing-obstacle","racing-rival"],
+    rpg:["rpg-command","rpg-enemy","rpg-attack","rpg-boss"],
+    board:["board-type","board-diagonal","board-draw","board-size","board-hint","board-pairs","board-picture","board-first","board-color"],
+    puzzle:["puzzle-type","puzzle-hint","puzzle-time"]
+  };
+  const QUESTION_TITLES = {
+    genre:"ジャンル", hero:"<ruby>主人公<rt>しゅじんこう</rt></ruby>", "shooting-ship":"<ruby>主人公<rt>しゅじんこう</rt></ruby>の<ruby>色<rt>いろ</rt></ruby>", "racing-car":"<ruby>主人公<rt>しゅじんこう</rt></ruby>の<ruby>色<rt>いろ</rt></ruby>", world:"<ruby>舞台<rt>ぶたい</rt></ruby>・<ruby>世界観<rt>せかいかん</rt></ruby>",
+    "action-view":"<ruby>画面<rt>がめん</rt></ruby>の<ruby>進<rt>すす</rt></ruby>み<ruby>方<rt>かた</rt></ruby>","action-attack":"<ruby>攻撃方法<rt>こうげきほうほう</rt></ruby>","action-enemy":"<ruby>何<rt>なに</rt></ruby>がいる","action-goal":"ゴールの<ruby>見<rt>み</rt></ruby>た<ruby>目<rt>め</rt></ruby>",
+    "shooting-view":"<ruby>背景<rt>はいけい</rt></ruby>の<ruby>流<rt>なが</rt></ruby>れ","shooting-move":"<ruby>移動方法<rt>いどうほうほう</rt></ruby>","shooting-fire":"<ruby>撃<rt>う</rt></ruby>ち<ruby>方<rt>かた</rt></ruby>","shooting-enemy":"<ruby>敵<rt>てき</rt></ruby>の<ruby>出現<rt>しゅつげん</rt></ruby>",
+    "runner-view":"どう<ruby>進<rt>すす</rt></ruby>む","runner-jump":"ジャンプ","runner-obstacle":"<ruby>障害物<rt>しょうがいぶつ</rt></ruby>","runner-goal-run":"<ruby>勝利条件<rt>しょうりじょうけん</rt></ruby>","runner-fall-move":"<ruby>動<rt>うご</rt></ruby>き<ruby>方<rt>かた</rt></ruby>","runner-fall-hazard":"<ruby>何<rt>なに</rt></ruby>がある","runner-goal-fall":"<ruby>勝利条件<rt>しょうりじょうけん</rt></ruby>",
+    "racing-shape":"コースの<ruby>形<rt>かたち</rt></ruby>","racing-obstacle":"<ruby>道<rt>みち</rt></ruby>にあるもの","racing-course":"コースの<ruby>長<rt>なが</rt></ruby>さ","racing-rival":"<ruby>相手<rt>あいて</rt></ruby>",
+    "rpg-command":"コマンド","rpg-enemy":"<ruby>敵<rt>てき</rt></ruby>の<ruby>数<rt>かず</rt></ruby>","rpg-attack":"<ruby>敵<rt>てき</rt></ruby>の<ruby>攻撃<rt>こうげき</rt></ruby>","rpg-boss":"ボス",
+    "board-type":"<ruby>遊<rt>あそ</rt></ruby>び","board-size":"<ruby>盤<rt>ばん</rt></ruby>の<ruby>大<rt>おお</rt></ruby>きさ","board-hint":"<ruby>置<rt>お</rt></ruby>ける<ruby>場所<rt>ばしょ</rt></ruby>","board-pairs":"カードの<ruby>組<rt>くみ</rt></ruby>","board-picture":"カードの<ruby>絵<rt>え</rt></ruby>","board-diagonal":"ななめ","board-draw":"<ruby>引<rt>ひ</rt></ruby>き<ruby>分<rt>わ</rt></ruby>け","board-first":"どっちが<ruby>先<rt>さき</rt></ruby>","board-color":"<ruby>盤<rt>ばん</rt></ruby>の<ruby>色<rt>いろ</rt></ruby>",
+    "puzzle-type":"パズルの<ruby>種類<rt>しゅるい</rt></ruby>","puzzle-hint":"ヒント","puzzle-time":"<ruby>制限時間<rt>せいげんじかん</rt></ruby>",
+    lives:"ハート", score:"<ruby>点数<rt>てんすう</rt></ruby>",
+    difficulty:"<ruby>難易度<rt>なんいど</rt></ruby>"
+  };
+  function withoutRuby(el){
+    if(!el) return '';
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('rt, .qsub').forEach(function(n){ n.remove(); });
+    return (clone.textContent || '').replace(/\s+/g, '').trim();
+  }
+  function stripRubyHtml(html){
+    const d = document.createElement('div');
+    d.innerHTML = html || '';
+    return withoutRuby(d);
+  }
+  function visibleLabel(btn){
+    return withoutRuby(btn.querySelector('b'));
+  }
+  function labelHTML(btn){
+    const b = btn.querySelector('b');
+    return b ? b.innerHTML : '';
+  }
+  const answers = {};
+  const EMPTY_LOG_HTML = '<span class="lg-empty">ステージを<ruby>進<rt>すす</rt></ruby>むたびに、<ruby>日記<rt>にっき</rt></ruby>が<ruby>増<rt>ふ</rt></ruby>えていくよ</span>';
+
+  const snap = document.getElementById('snap');
+  const sections = Array.from(snap.children);
+  const dotsWrap = document.getElementById('dots');
+  const progressFill = document.getElementById('progressFill');
+  const logbody = document.getElementById('logbody');
+  const logpanel = document.getElementById('logpanel');
+  const logtitle = document.getElementById('logtitle');
+
+  function setLogCollapsed(collapsed){
+    logpanel.classList.toggle('collapsed', collapsed);
+    document.body.classList.toggle('log-open', !collapsed);
+    logtitle.innerHTML = '<ruby>冒険記録<rt>ぼうけんきろく</rt></ruby>';
+    if(!collapsed) layoutLog();
+  }
+
+  function setEndMode(on){
+    const was = document.body.classList.contains('on-end');
+    document.body.classList.toggle('on-end', on);
+    const endSec = document.getElementById('s-end');
+    if(!on){
+      endSec.classList.remove('chest-reveal');
+      removeChestHero();
+      return;
+    }
+    // 全部答えて最後の画面に着いたときだけ、宝箱の演出を出す（未回答のときは出さない）
+    if(!was && !endSec.classList.contains('has-missing')){
+      endSec.classList.remove('chest-reveal');
+      void endSec.offsetWidth;
+      endSec.classList.add('chest-reveal');
+    }
+  }
+
+  // 保存したときの演出。見くらべるために切りかえられるようにしてある（true で出す）
+  const SAVE_EFFECTS = { hero:true, map:true, confetti:false };
+
+  // 演出を始めて、全部終わるまでのミリ秒を返す（動きを減らす設定のときは 0）
+  function playSaveEffects(){
+    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return 0;
+    let ms = 0;
+    if(SAVE_EFFECTS.hero && launchHero()) ms = Math.max(ms, 1100);
+    if(SAVE_EFFECTS.map) ms = Math.max(ms, flashMap());
+    if(SAVE_EFFECTS.confetti){ launchConfetti(); ms = Math.max(ms, 2500); }
+    return ms;
+  }
+
+  // 選んだ主人公の絵（シューティングは自機、レーシングは自分の車）。とび上がり中と着地後の2枚。
+  // 絵は game-assets からコピーした image/chest_pop を使う（このページだけで動くように）
+  function heroPopImages(){
+    const g = selectedGenre();
+    if(g === "shooting" && answers["shooting-ship"] && answers["shooting-ship"].images){
+      const src = "image/chest_pop/ships/" + answers["shooting-ship"].images.ship;
+      return { jump:src, stand:src, vehicle:true };
+    }
+    if(g === "racing" && answers["racing-car"] && answers["racing-car"].images){
+      const src = "image/chest_pop/cars/" + answers["racing-car"].images.me;
+      return { jump:src, stand:src, vehicle:true };
+    }
+    if(answers.hero && answers.hero.images){
+      const h = answers.hero.images.hero;
+      const base = "image/chest_pop/hero/" + h.dir + "/" + h.name;
+      return { jump:base + "_jump.png", stand:base + "_idle.png", vehicle:false };
+    }
+    return null;
+  }
+
+  // 主人公が宝箱の裏から飛び出して、宝箱の上に着地する
+  function launchHero(){
+    const wrap = document.querySelector('.end-chest-wrap');
+    const imgs = heroPopImages();
+    if(!wrap || !imgs) return false;
+    removeChestHero();
+    wrap.classList.remove('burst');
+    void wrap.offsetWidth;
+    wrap.classList.add('burst');
+    const img = document.createElement('img');
+    img.className = 'chest-hero' + (imgs.vehicle ? ' vehicle' : '');
+    img.alt = '';
+    img.src = imgs.jump;
+    img.addEventListener('animationend', function(){ img.src = imgs.stand; });
+    wrap.appendChild(img);
+    return true;
+  }
+
+  function removeChestHero(){
+    document.querySelectorAll('.chest-hero').forEach(function(el){ el.remove(); });
+  }
+
+  // 地図の番号を1から順に光らせて、最後に宝箱の印を光らせる
+  function flashMap(){
+    const dots = Array.from(dotsWrap.children).filter(function(d){ return !d.classList.contains('dot-start'); });
+    if(!dots.length) return 0;
+    dots.forEach(function(d, i){
+      d.classList.remove('dot-flash', 'dot-new');
+      void d.offsetWidth;
+      d.style.setProperty('--flash-delay', (0.15 + i * 0.09).toFixed(2) + 's');
+      d.classList.toggle('dot-chest', i === dots.length - 1);
+      d.classList.add('dot-flash');
+      d.addEventListener('animationend', function done(){
+        d.classList.remove('dot-flash', 'dot-chest');
+        d.removeEventListener('animationend', done);
+      });
+    });
+    // 最後（宝箱の印）が光り終わるまで
+    return (0.15 + (dots.length - 1) * 0.09 + 0.8) * 1000;
+  }
+
+  // 紙ふぶきを宝箱の裏から飛び出させる（2秒ほどで消える）
+  function launchConfetti(){
+    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const wrap = document.querySelector('.end-chest-wrap');
+    if(!wrap) return;
+    wrap.classList.remove('burst');
+    void wrap.offsetWidth;
+    wrap.classList.add('burst');
+    const colors = ['#ff5c8a', '#ffd23f', '#3ec1ff', '#7ae03c', '#b07cff', '#ff9f1c'];
+    for(let i = 0; i < 80; i++){
+      const c = document.createElement('div');
+      c.className = 'confetti';
+      c.style.background = colors[i % colors.length];
+      // 上に向かって扇形に飛び出す（いちばん高いところ）→ 少し広がりながら下へ落ちる
+      const angle = (Math.random() * 140 - 70) * Math.PI / 180;   // 真上から左右70度まで
+      const power = 260 + Math.random() * 260;
+      const x1 = Math.sin(angle) * power * 1.3;
+      const y1 = -Math.cos(angle) * power;
+      c.style.setProperty('--x1', Math.round(x1) + 'px');
+      c.style.setProperty('--y1', Math.round(y1) + 'px');
+      c.style.setProperty('--x2', Math.round(x1 * 1.35) + 'px');
+      c.style.setProperty('--y2', Math.round(y1 + 420 + Math.random() * 200) + 'px');
+      c.style.setProperty('--delay', (Math.random() * 0.3).toFixed(2) + 's');
+      c.style.setProperty('--fall', (1.7 + Math.random() * 0.8).toFixed(2) + 's');
+      c.style.setProperty('--spin', Math.round(360 + Math.random() * 720) * (Math.random() < 0.5 ? -1 : 1) + 'deg');
+      if(Math.random() < 0.3){ c.style.width = '12px'; c.style.height = '12px'; c.style.borderRadius = '50%'; }
+      c.addEventListener('animationend', function(){ c.remove(); });
+      wrap.appendChild(c);
+    }
+  }
+
+  function setScreenMode(id){
+    document.body.classList.toggle('on-start', id === 's-start');
+    setEndMode(id === 's-end');
+  }
+
+  function selectedGenre(){
+    return answers.genre ? answers.genre.value : null;
+  }
+
+  function usesLives(){
+    const g = selectedGenre();
+    return g !== "board" && g !== "puzzle";
+  }
+
+  function usesScore(){
+    return selectedGenre() !== "board";
+  }
+
+  function usesDifficulty(){
+    return selectedGenre() !== "board";
+  }
+
+  function autoGameTitle(){
+    const titles = {
+      action:"アクションゲーム",
+      shooting:"シューティングゲーム",
+      runner:"ランナーゲーム",
+      racing:"レーシングゲーム",
+      rpg:"RPG",
+      board:"ボードゲーム",
+      puzzle:"パズルゲーム"
+    };
+    const g = selectedGenre();
+    return g && titles[g] ? titles[g] : '（未回答）';
+  }
+
+  function boardTypeValue(){
+    return answers["board-type"] ? answers["board-type"].value : null;
+  }
+
+  function runnerViewValue(){
+    return answers["runner-view"] ? answers["runner-view"].value : null;
+  }
+
+  function runnerJumpValue(){
+    return answers["runner-jump"] ? answers["runner-jump"].value : null;
+  }
+
+  function racingCourseValue(){
+    return answers["racing-course"] ? answers["racing-course"].value : null;
+  }
+
+  function activeQuestionKeys(){
+    const genre = selectedGenre();
+    let genreKeys = (genre && GENRE_ORDER[genre]) ? GENRE_ORDER[genre].slice() : [];
+    if(genre === "board"){
+      const t = boardTypeValue();
+      if(t !== "othello"){
+        genreKeys = genreKeys.filter(function(k){ return k !== "board-size" && k !== "board-hint"; });
+      }
+      if(t !== "memory"){
+        genreKeys = genreKeys.filter(function(k){ return k !== "board-pairs" && k !== "board-picture"; });
+      }
+      if(t !== "marubatsu"){
+        genreKeys = genreKeys.filter(function(k){ return k !== "board-diagonal" && k !== "board-draw"; });
+      }
+    }
+    if(genre === "runner"){
+      const v = runnerViewValue();
+      if(v !== "run"){
+        genreKeys = genreKeys.filter(function(k){
+          return k !== "runner-jump" && k !== "runner-obstacle" && k !== "runner-goal-run";
+        });
+      }
+      if(v !== "fall"){
+        genreKeys = genreKeys.filter(function(k){
+          return k !== "runner-fall-move" && k !== "runner-fall-hazard" && k !== "runner-goal-fall";
+        });
+      }
+    }
+    let common = COMMON_ORDER.slice();
+    if(genre === "shooting") common = common.map(function(k){ return k === "hero" ? "shooting-ship" : k; });
+    if(genre === "racing") common = common.map(function(k){ return k === "hero" ? "racing-car" : k; });
+    const keys = common.concat(genreKeys);
+    if(usesLives()) keys.push("lives");
+    if(usesScore()) keys.push("score");
+    if(usesDifficulty()) keys.push("difficulty");
+    return keys;
+  }
+
+  function refreshGenreQuestions(){
+    const genre = selectedGenre();
+    const boardType = boardTypeValue();
+    const runnerView = runnerViewValue();
+    document.querySelectorAll('.genre-question').forEach(function(sec){
+      var show = !!(genre && sec.dataset.genres === genre);
+      if(show && sec.dataset.boardTypes === "pending"){
+        show = !boardType;
+      } else if(show && sec.dataset.boardTypes){
+        show = sec.dataset.boardTypes === boardType;
+      }
+      if(show && sec.dataset.runnerTypes){
+        show = sec.dataset.runnerTypes === runnerView;
+      }
+      sec.style.display = show ? '' : 'none';
+    });
+    const holeBtn = document.querySelector('.options[data-key="runner-obstacle"] .option[data-value="hole"]');
+    if(holeBtn){
+      const hideHole = runnerJumpValue() === "none";
+      holeBtn.style.display = hideHole ? 'none' : '';
+      if(hideHole && answers["runner-obstacle"] && answers["runner-obstacle"].value === "hole"){
+        delete answers["runner-obstacle"];
+        const logLine = logbody.querySelector('[data-logkey="runner-obstacle"]');
+        if(logLine) logLine.remove();
+        holeBtn.classList.remove('selected');
+      }
+    }
+    // シューティングの移動：横スクロールは上下のみ、それ以外は左右のみ
+    const shootingHorizontal = answers["shooting-view"] && answers["shooting-view"].value === "horizontal";
+    [["horizontal", shootingHorizontal], ["vertical", !shootingHorizontal]].forEach(function(pair){
+      const btn = document.querySelector('.options[data-key="shooting-move"] .option[data-value="'+pair[0]+'"]');
+      if(!btn) return;
+      btn.style.display = pair[1] ? 'none' : '';
+      if(pair[1] && answers["shooting-move"] && answers["shooting-move"].value === pair[0]){
+        delete answers["shooting-move"];
+        const logLine = logbody.querySelector('[data-logkey="shooting-move"]');
+        if(logLine) logLine.remove();
+        btn.classList.remove('selected');
+      }
+    });
+    const heroSec = document.querySelector('.section[data-q="hero"]');
+    if(heroSec) heroSec.style.display = (genre === "shooting" || genre === "racing") ? 'none' : '';
+    const livesSec = document.querySelector('.section[data-q="lives"]');
+    if(livesSec) livesSec.style.display = usesLives() ? '' : 'none';
+    const scoreSec = document.querySelector('.section[data-q="score"]');
+    if(scoreSec) scoreSec.style.display = usesScore() ? '' : 'none';
+    const finalSec = document.querySelector('.section[data-q="final"]');
+    if(finalSec) finalSec.style.display = usesDifficulty() ? '' : 'none';
+    layoutOptionGrids();
+    pruneStaleAnswers();
+  }
+
+  // 見えている選択肢が4つか6つのときは2列にする（隠したボタンは数えない）
+  function layoutOptionGrids(){
+    document.querySelectorAll('.options').forEach(function(group){
+      const shown = Array.from(group.querySelectorAll('.option')).filter(function(btn){
+        return !btn.hidden && btn.style.display !== 'none';
+      }).length;
+      group.classList.toggle('two-cols', shown === 4 || shown === 6);
+    });
+  }
+
+  function pruneStaleAnswers(){
+    const keep = {};
+    activeQuestionKeys().forEach(function(key){ keep[key] = true; });
+    Object.keys(answers).forEach(function(key){
+      if(keep[key]) return;
+      delete answers[key];
+      const logLine = logbody.querySelector('[data-logkey="'+key+'"]');
+      if(logLine) logLine.remove();
+      const group = document.querySelector('.options[data-key="'+key+'"]');
+      if(group) group.querySelectorAll('.option.selected').forEach(function(b){ b.classList.remove('selected'); });
+    });
+    if(!logbody.querySelector('.lg-line')){
+      logbody.innerHTML = EMPTY_LOG_HTML;
+    }
+  }
+
+  function visibleSections(){
+    return sections.filter(sec=>sec.style.display !== 'none');
+  }
+
+  let lastActiveIndex = 0;
+  let lastDotsKey = '';
+
+  function sectionKey(sec){
+    return sec.id || sec.dataset.q || '';
+  }
+
+  let lastNumCount = null;   // 前に並んでいた番号の数（最初の表示ではアニメーションしない）
+  const POP_START_DELAY = 0.15;  // 増えた番号が出はじめるまでの秒数
+  const POP_STEP = 0.08;         // 番号を1つずつずらす秒数
+  const POP_LENGTH = 0.5;        // 1つの番号のアニメーションの秒数（CSS の dot-pop と同じ）
+  let popEndMs = 0;              // 今回のアニメーションが全部終わるまでのミリ秒（増えなかったら0）
+
+  function rebuildDots(){
+    popEndMs = 0;
+    const visible = visibleSections();
+    const key = visible.map(sectionKey).join('|');
+    if(key === lastDotsKey && dotsWrap.children.length === visible.length){
+      return;
+    }
+    lastDotsKey = key;
+    const prevFill = progressFill.style.width;
+    const active = Math.max(0, Math.min(lastActiveIndex, Math.max(visible.length - 1, 0)));
+    const frag = document.createDocumentFragment();
+    visible.forEach((sec,i)=>{
+      const d = document.createElement('span');
+      d.dataset.index = i;
+      d.title = withoutRuby(sec.querySelector('.qtitle, h1'));
+      if(sec.id === 's-start'){
+        d.classList.add('dot-start');
+      } else {
+        const off = document.createElement('img');
+        const on = document.createElement('img');
+        off.className = 'geo-off';
+        on.className = 'geo-on';
+        off.alt = '';
+        on.alt = '';
+        if(sec.id === 's-end'){
+          off.src = 'image/contents/geo_takarabako_off.png';
+          on.src = 'image/contents/geo_takarabako_on.png';
+        } else {
+          const kind = (i % 2 === 1) ? '1' : '2';
+          off.src = 'image/contents/geo_visual' + kind + '_off.png';
+          on.src = 'image/contents/geo_visual' + kind + '_on.png';
+          const num = document.createElement('b');
+          num.className = 'dot-num';
+          num.textContent = String(i);
+          // 増えた番号だけ、ぽんと出てくる
+          if(lastNumCount !== null && i > lastNumCount){
+            d.classList.add('dot-new');
+            // 番号が出終わってから、次の質問へスクロールする（クリックの処理で popEndMs を待つ）
+            const delay = POP_START_DELAY + (i - lastNumCount - 1) * POP_STEP;
+            d.style.setProperty('--pop-delay', delay.toFixed(2) + 's');
+            popEndMs = Math.max(popEndMs, (delay + POP_LENGTH) * 1000);
+          }
+          d.appendChild(num);
+        }
+        d.insertBefore(on, d.firstChild);
+        d.insertBefore(off, d.firstChild);
+      }
+      if(i < active) d.classList.add('done');
+      if(i === active) d.classList.add('active');
+      d.addEventListener('click', function(){ goTo(i); });
+      frag.appendChild(d);
+    });
+    dotsWrap.replaceChildren(frag);
+    lastNumCount = visible.filter(function(sec){ return sec.id !== 's-start' && sec.id !== 's-end'; }).length;
+    updateDots(active, {keepFill: prevFill});
+  }
+
+  function updateDots(activeIndex, opts){
+    const visible = visibleSections();
+    if(!visible.length) return;
+    lastActiveIndex = Math.max(0, Math.min(activeIndex, visible.length - 1));
+    Array.from(dotsWrap.children).forEach((d,i)=>{
+      d.classList.toggle('active', i===lastActiveIndex);
+      d.classList.toggle('done', i<lastActiveIndex);
+    });
+    const next = visible.length > 1
+      ? ((lastActiveIndex)/(visible.length-1)*100).toFixed(1)+'%'
+      : '0%';
+    if(opts && opts.keepFill){
+      const prev = parseFloat(opts.keepFill) || 0;
+      const n = parseFloat(next) || 0;
+      if(n < prev){
+        progressFill.style.width = opts.keepFill;
+        return;
+      }
+    }
+    progressFill.style.width = next;
+  }
+
+  function setupObserver(){
+    const io = new IntersectionObserver((entries)=>{
+      if(skipObserver) return;
+      let best = null;
+      entries.forEach(function(e){
+        if(!e.isIntersecting) return;
+        if(!best || e.intersectionRatio > best.intersectionRatio) best = e;
+      });
+      if(!best) return;
+      const visible = visibleSections();
+      const idx = visible.indexOf(best.target);
+      if(idx >= 0) updateDots(idx);
+      setScreenMode(best.target.id);
+    }, {root:snap, threshold:0.6});
+    sections.forEach(s=>io.observe(s));
+  }
+
+  let skipObserver = false;
+
+  function cloneAnswers(){
+    const o = {};
+    Object.keys(answers).forEach(function(k){
+      const a = answers[k];
+      o[k] = {
+        value: a.value,
+        md: a.md,
+        labelText: a.labelText,
+        labelHTML: a.labelHTML,
+        title: a.title,
+        images: a.images
+      };
+    });
+    return o;
+  }
+
+  let scrollTimer = 0;
+
+  // 「次の冒険へ」で回答を消すたびに増やす。前の人の履歴にはブラウザの戻るで戻れないようにする
+  let quizSession = Date.now();
+
+  function quizHistoryState(section){
+    return { answers: cloneAnswers(), section: section, session: quizSession };
+  }
+
+  function pushQuizHistory(section){
+    history.pushState(quizHistoryState(section), '');
+  }
+
+  function sectionIndexByKey(key){
+    const vis = visibleSections();
+    for(let i = 0; i < vis.length; i++){
+      if(sectionKey(vis[i]) === key) return i;
+    }
+    return -1;
+  }
+
+  function scrollToVisibleIndex(idx, behavior){
+    const vis = visibleSections();
+    if(!vis.length) return;
+    if(idx < 0) idx = 0;
+    if(idx >= vis.length) idx = vis.length - 1;
+    clearTimeout(scrollTimer);
+    skipObserver = true;
+    const instant = behavior !== 'smooth';
+    if(instant){
+      snap.style.scrollBehavior = 'auto';
+      snap.scrollTop = vis[idx].offsetTop;
+      snap.style.scrollBehavior = '';
+    } else {
+      vis[idx].scrollIntoView({behavior:'smooth', block:'start'});
+    }
+    updateDots(idx);
+    setScreenMode(vis[idx].id);
+    scrollTimer = setTimeout(function(){ skipObserver = false; }, instant ? 80 : 700);
+  }
+
+  function rebuildLogFromAnswers(){
+    logbody.innerHTML = EMPTY_LOG_HTML;
+    activeQuestionKeys().forEach(function(key){
+      if(answers[key]) appendLog(key, answers[key]);
+    });
+  }
+
+  function applyHistoryState(state){
+    if(!state) state = { answers: {}, index: 0 };
+    Object.keys(answers).forEach(function(k){ delete answers[k]; });
+    const src = state.answers || {};
+    Object.keys(src).forEach(function(k){ answers[k] = src[k]; });
+
+    document.querySelectorAll('.option.selected').forEach(function(b){
+      b.classList.remove('selected');
+    });
+    Object.keys(answers).forEach(function(key){
+      const group = document.querySelector('.options[data-key="'+key+'"]');
+      if(!group) return;
+      const btn = group.querySelector('.option[data-value="'+answers[key].value+'"]');
+      if(btn) btn.classList.add('selected');
+    });
+
+    lastDotsKey = '';
+    refreshGenreQuestions();
+    rebuildLogFromAnswers();
+    rebuildDots();
+    renderPreview();
+
+    const vis = visibleSections();
+    let idx = state.section ? sectionIndexByKey(state.section) : -1;
+    if(idx < 0 && typeof state.index === 'number') idx = state.index;
+    if(idx < 0) idx = 0;
+    if(idx >= vis.length) idx = Math.max(0, vis.length - 1);
+    scrollToVisibleIndex(idx, 'auto');
+  }
+
+  let jumpTimer = 0;
+
+  function goTo(index){
+    const visible = visibleSections();
+    if(!visible[index]) return;
+    pushQuizHistory(sectionKey(visible[index]));
+    const jump = Math.abs(index - lastActiveIndex) > 1;
+    if(!jump){
+      scrollToVisibleIndex(index, 'smooth');
+      return;
+    }
+    // 離れたページへは一気に飛ぶが、変わったことが分かるように、消してから進む向きに出す
+    const dir = index > lastActiveIndex ? 1 : -1;
+    const stageOf = function(sec){ return sec ? (sec.querySelector('.q-stage') || sec) : null; };
+    const current = stageOf(visible[lastActiveIndex]);
+    clearTimeout(jumpTimer);
+    document.querySelectorAll('.jump-leave').forEach(function(el){ el.classList.remove('jump-leave'); });
+    if(current){
+      current.style.setProperty('--jump-to', (-dir * 140) + 'px');
+      current.classList.add('jump-leave');
+    }
+    jumpTimer = setTimeout(function(){
+      scrollToVisibleIndex(index, 'auto');
+      if(current) current.classList.remove('jump-leave');
+      const target = stageOf(visible[index]);
+      target.style.setProperty('--jump-from', (dir * 140) + 'px');
+      target.classList.remove('jump-in');
+      void target.offsetWidth;
+      target.classList.add('jump-in');
+      target.addEventListener('animationend', function done(){
+        target.classList.remove('jump-in');
+        target.removeEventListener('animationend', done);
+      });
+    }, 220);
+  }
+
+  // 回答をすべて消して、スタート画面にもどる（つぎの人のため）
+  function resetQuiz(){
+    quizSession = Date.now();
+    savedKey = null;
+    setLogCollapsed(true);
+    showRandomGenres();
+    applyHistoryState({ answers: {}, index: 0 });
+    history.pushState(quizHistoryState(sectionKey(visibleSections()[0])), '');
+  }
+
+  document.getElementById('logbar').addEventListener('click', ()=>{
+    setLogCollapsed(!logpanel.classList.contains('collapsed'));
+  });
+
+  document.querySelectorAll('.options').forEach(group=>{
+    const key = group.dataset.key;
+    group.querySelectorAll('.option').forEach(btn=>{
+      btn.addEventListener('click', (ev)=>{
+        group.querySelectorAll('.option').forEach(b=>b.classList.remove('selected'));
+        btn.classList.add('selected');
+
+        answers[key] = {
+          value: btn.dataset.value,
+          md: btn.dataset.md,
+          labelText: visibleLabel(btn),
+          labelHTML: labelHTML(btn),
+          title: btn.dataset.title || visibleLabel(btn)
+        };
+        if(key === "hero") answers[key].images = pickImages(btn.dataset.value);
+        if(key === "shooting-ship") answers[key].images = pickShipImages(btn.dataset.value);
+        if(key === "racing-car") answers[key].images = pickCarImages(btn.dataset.value);
+        if(key === "world") answers[key].images = pickWorldBg(btn.dataset.value);
+        if(key === "board-picture") answers[key].images = pickCards(btn.dataset.value);
+
+        appendLog(key, answers[key]);
+        spark(ev);
+        refreshGenreQuestions();
+        rebuildDots();
+        renderPreview();
+
+        const section = group.closest('.section');
+        const visible = visibleSections();
+        const current = visible.indexOf(section);
+        const nextSection = current >= 0 ? (visible[current + 1] || section) : visible[0];
+        pushQuizHistory(sectionKey(nextSection));
+        clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(function(){
+          const idx = sectionIndexByKey(sectionKey(nextSection));
+          if(idx >= 0) scrollToVisibleIndex(idx, 'smooth');
+        }, Math.max(420, popEndMs + 150));
+      });
+    });
+  });
+
+  function appendLog(key, ans){
+    if(logbody.querySelector('.lg-empty')) logbody.innerHTML = '';
+    const existing = logbody.querySelector('[data-logkey="'+key+'"]');
+    const line = existing || document.createElement('div');
+    line.dataset.logkey = key;
+    line.className = 'lg-line';
+    line.replaceChildren();
+    const name = document.createElement('span');
+    name.className = 'lg-name';
+    name.innerHTML = QUESTION_TITLES[key] || '';
+    const dots = document.createElement('span');
+    dots.className = 'lg-dots';
+    const val = document.createElement('b');
+    val.innerHTML = ans.labelHTML || '';
+    line.append(name, dots, val);
+    if(!existing) logbody.appendChild(line);
+    layoutLog();
+    logbody.scrollTop = logbody.scrollHeight;
+  }
+
+  function layoutLog(){
+    const lines = Array.from(logbody.querySelectorAll('.lg-line'));
+    if(!lines.length) return;
+    let maxName = 0;
+    let maxVal = 0;
+    lines.forEach(function(line){
+      const name = line.querySelector('.lg-name');
+      const val = line.querySelector('b');
+      val.style.width = 'auto';
+      line.style.width = 'auto';
+      maxName = Math.max(maxName, name.scrollWidth);
+      maxVal = Math.max(maxVal, val.scrollWidth);
+    });
+    const total = maxName + 28 + 20 + maxVal;
+    lines.forEach(function(line){
+      line.style.width = total + 'px';
+      line.querySelector('b').style.width = maxVal + 'px';
+    });
+  }
+
+  function rpgDifficultyLine(){
+    const v = answers.difficulty.value;
+    const hp = v === "easy" ? 2 : v === "hard" ? 4 : 3;
+    const name = v === "easy" ? "やさしい" : v === "hard" ? "むずかしい" : "ふつう";
+    return "難易度：" + name + "。レベル1の敵のHPは" + hp + "、レベル2の敵のHPは" + (hp + 1) + "（レベル1の敵より1多い）、ボスのHPは" + (hp * 2) + "。速度・敵の数・制限時間・出現頻度は変えない";
+  }
+
+  function puzzleDifficultyLine(){
+    const v = answers.difficulty.value;
+    const name = v === "easy" ? "やさしい" : v === "hard" ? "むずかしい" : "ふつう";
+    const speed = v === "easy" ? "落下や操作の速さはゆっくり" : v === "hard" ? "落下や操作の速さは速い" : "標準の速さ";
+    const sec = v === "easy" ? 90 : v === "hard" ? 45 : 60;
+    return "難易度：" + name + "。" + speed + "。制限時間ありなら" + sec + "秒。盤の大きさ・消す数・混ぜる回数は種類の質問のとおり。敵は出さない";
+  }
+
+  // アクション・シューティング・ランナー・レーシングの難易度。ジャンルの仕様とぶつからないように、変えるものだけ書く
+  function genreDifficultyLine(){
+    const v = answers.difficulty.value;
+    const name = v === "easy" ? "やさしい" : v === "hard" ? "むずかしい" : "ふつう";
+    const g = selectedGenre();
+    if(g === "action"){
+      const body = v === "easy" ? "穴はせまく、敵はゆっくり、足場の間隔はせまい"
+        : v === "hard" ? "穴は広く、敵は速く、足場の間隔は広い"
+        : "穴の広さ・敵の速さ・足場の間隔は標準";
+      return "難易度：" + name + "。" + body + "。敵・穴・足場の数は変えない";
+    }
+    if(g === "shooting"){
+      const body = v === "easy" ? "敵はゆっくり、出てくる間隔は長い。制限時間は30秒"
+        : v === "hard" ? "敵は速く、出てくる間隔は短い。制限時間は60秒"
+        : "敵の速さと出てくる間隔は標準。制限時間は45秒";
+      return "難易度：" + name + "。" + body + "。ほかは変えない";
+    }
+    if(g === "runner"){
+      const body = v === "easy" ? "進む（落ちる）速さはゆっくり。障害物はだいたい2.5秒に1回"
+        : v === "hard" ? "進む（落ちる）速さは速い。障害物はだいたい1.5秒に1回"
+        : "進む（落ちる）速さは標準。障害物はだいたい2秒に1回";
+      return "難易度：" + name + "。" + body + "（質問の「だいたい2秒に1回」は、ふつうのときの目安）。ほかは変えない";
+    }
+    if(g === "racing"){
+      const pct = v === "easy" ? "6割〜8割5分" : v === "hard" ? "9割〜102%" : "7割5分〜95%";
+      return "難易度：" + name + "。CPUの速さは、プレイヤーの最高速度の" + pct + "の間で、1台ずつ少しずつ変える。ほかは変えない";
+    }
+    return null;
+  }
+
+  // ゲームの内容の節で、同じ文が2回目以降に出たら消す。画像の決まりの文は技術要件に1回だけ書くので、ここでは全部消す
+  const SPEC_ONCE = /(HTMLからの相対パスで読む|PNGの中身は(HTMLに)?埋め込まない|図形で描き直さない)(。|(?=\n)|$)/g;
+  function dedupeSpec(md){
+    const seen = {};
+    return md.split("\n").map(function(line){
+      if(/^#/.test(line)) return line;
+      const head = (line.match(/^(- )/) || [""])[0];
+      let body = line.slice(head.length).replace(SPEC_ONCE, "");
+      const parts = body.split("。");
+      const keep = parts.filter(function(p, i){
+        const k = p.trim();
+        if(k.length < 4) return true;
+        if(seen[k]) return false;
+        seen[k] = 1; return true;
+      });
+      body = keep.join("。").replace(/。{2,}/g, "。").replace(/^。|。\s*$/g, "");
+      return body.trim() ? head + body : (head ? "" : body);
+    }).join("\n").replace(/\n{3,}/g, "\n\n");
+  }
+
+  function buildMarkdown(){
+    const keys = activeQuestionKeys();
+    const missing = keys.filter(k => !answers[k]);
+    let md = '# AGENTS.md — ブラウザゲーム制作仕様書\n\n';
+    md += 'このファイルは質問フォームの回答から自動生成されました。\n';
+    md += '以下の仕様を優先して、ブラウザで遊べるゲームを実装してください。\n\n';
+
+    md += '## ゲームの内容\n';
+    md += '### ゲームタイトル\n' + autoGameTitle() + '\n\n';
+
+    keys.forEach((key,i)=>{
+      md += '### ' + (i+1) + '. ' + stripRubyHtml(QUESTION_TITLES[key]) + '\n';
+      var line = answers[key] ? answers[key].md : '（未回答）';
+      if(key === "difficulty" && answers[key]){
+        if(selectedGenre() === "rpg") line = rpgDifficultyLine();
+        else if(selectedGenre() === "puzzle") line = puzzleDifficultyLine();
+        else line = genreDifficultyLine() || line;
+      }
+      if(key === "genre" && selectedGenre() === "board" && answers.hero && answers.hero.images){
+        line += "左の主人公の画像は " + heroIdlePath(answers.hero.images.hero) + "、右の敵の画像は " + heroIdlePath(answers.hero.images.enemy) + "。HTMLからの相対パスで読む。PNGの中身は埋め込まない。顔は描き直さない。";
+      }
+      if(key === "board-picture" && answers[key] && answers[key].images){
+        const faces = answers[key].images;
+        line = line.replace(/(表(?:の形)?は )(game-assets\/board\/cards\/[a-z]+\/) からランダムに、組数のぶんだけ使う。/, function(m, a, dir){
+          return a + dir + " の次の絵を、前から組数のぶんだけ使う：" + faces.join("、") + "。";
+        });
+      }
+      if(key === "hero" && answers.hero && answers.hero.images){
+        const heroLines = heroImageLines();
+        if(heroLines) line += "。" + heroLines;
+      }
+      if(key === "world" && answers.world && (selectedGenre() === "action" || selectedGenre() === "runner")){
+        line += "。地面と足場は game-assets/_common/world/" + answers.world.value + "/ のタイル（64×64）を並べて貼る。図形で描き直さない。\n"
+          + "- 地面のいちばん上：ground_top_left.png・ground_top.png・ground_top_right.png（穴のふちは left と right）\n"
+          + "- その下：ground_center.png（穴のふちの列は ground_left.png と ground_right.png）\n"
+          + "- 浮いた足場：float_left.png・float_mid.png・float_right.png。1マスだけなら float_single.png\n"
+          + "- 床と足場は64pxのマス目にそろえて置く。床のかたまりは横3マス以上、穴は横2マス以上にする。左はしは必ず ground_top_left と ground_left、右はしは必ず ground_top_right と ground_right にする（画面やステージのはしまで続く床も同じ）\n"
+          + "同じフォルダの次のタイルは、使ってもよい（使わなくてもよい）。坂は作らない。\n"
+          + "- 厚い浮き島の下のふち：ground_bottom_left.png・ground_bottom.png・ground_bottom_right.png\n"
+          + "- 柱や壁：vertical_top.png・vertical_mid.png・vertical_bottom.png\n"
+          + "- 雲の足場：cloud_left.png・cloud_mid.png・cloud_right.png。1マスだけなら cloud_single.png\n"
+          + "- 足場の端の飾り：float_overhang_left.png・float_overhang_right.png\n"
+          + "- 背景の雲の飾り（当たり判定なし）：cloud_background.png"
+          + worldBgLines();
+      } else if(key === "world" && answers.world && selectedGenre() === "racing"){
+        const ground = {desert: "sand", volcano: "dirt", scifi: "dirt"}[answers.world.value] || "grass";
+        line += "。レースの地面は kit.road の ground: \"" + ground + "\"（" + {grass: "芝", sand: "砂", dirt: "土"}[ground] + "。地面は kit が敷く）";
+      } else if(key === "world" && answers.world && selectedGenre() !== "racing"){
+        line += "。" + worldBgLines().replace(/^\n/, "");
+      }
+      if(key === "rpg-enemy" && answers["rpg-enemy"] && answers.hero && answers.hero.images && answers.hero.images.rpg){
+        line += "。" + rpgEnemyLines();
+      }
+      if(key === "rpg-boss" && answers.hero && answers.hero.images && answers.hero.images.rpg && answers["rpg-boss"]){
+        line += "。" + rpgBossLines();
+      }
+      if(key === "racing-car" && answers[key] && answers[key].images){
+        line += "。" + carImageLines();
+      }
+      if(key === "shooting-ship" && answers[key] && answers[key].images){
+        line += "。" + shipImageLines();
+      }
+      if(key === "action-enemy" || key === "runner-obstacle" || key === "runner-fall-hazard"){
+        line += enemyImageLine(key);
+      }
+      // ハート・トゲ・旗は game-assets/_common の絵を貼る
+      const v = answers[key] ? answers[key].value : null;
+      const usesSpikes = (key === "action-enemy" && v === "obstacle")
+        || ((key === "runner-obstacle" || key === "runner-fall-hazard") && (v === "spike" || v === "mixed"));
+      if(usesSpikes){
+        line += "\nトゲの画像は game-assets/_common/objects/spikes.png（64×64）を貼る。HTMLからの相対パスで読む。PNGの中身は埋め込まない。図形で描き直さない。";
+      }
+      // パズルのブロック・壁・ゴールは game-assets/puzzle と _common/objects の絵を貼る
+      const PUZZLE_IMG = "HTMLからの相対パスで読む。PNGの中身は埋め込まない。図形で描き直さない。";
+      if(key === "puzzle-type" && v === "same"){
+        line += "\n4種類のブロックは、色と形がちがう game-assets/puzzle/same_red_heart.png（赤いハート）・same_yellow_star.png（黄色い星）・same_blue_circle.png（青い円）・same_green_diamond.png（緑のひし形）を、マスの大きさに縮めて貼る。色が見分けにくい子も形で分かるようにするため、色を塗ったり形を描き直したりしない。" + PUZZLE_IMG;
+      }
+      if(key === "puzzle-type" && v === "tetris"){
+        line += "\nブロックは game-assets/puzzle/ の7色を、マスの大きさに縮めて貼る。形ごとに1色: I＝tetris_blue.png、O＝tetris_yellow.png、T＝tetris_pink.png、S＝tetris_green.png、Z＝tetris_red.png、J＝tetris_white.png、L＝tetris_orange.png。落ちる位置の薄いブロックは、同じ絵を半とうめいにして貼る。" + PUZZLE_IMG;
+      }
+      if(key === "puzzle-type" && v === "maze"){
+        line += "\n迷路の壁は game-assets/puzzle/bricks_grey.png、ゴールは game-assets/_common/objects/flag_red_a.png を、マスの大きさに縮めて貼る。" + PUZZLE_IMG;
+      }
+      const fallMoveJump = answers["runner-fall-move"] && answers["runner-fall-move"].value === "jump";
+      if(key === "runner-fall-hazard" && (v === "platform" || v === "mixed" || fallMoveJump)){
+        line += "\n跳ねる足場の画像は game-assets/_common/objects/spring.png（64×64）を貼る。乗って跳ねた瞬間だけ spring_out.png（バネがのびた絵）に変える。HTMLからの相対パスで読む。PNGの中身は埋め込まない。図形で描き直さない。";
+      }
+      if((key === "runner-goal-run" || key === "runner-goal-fall") && v === "flag"){
+        line += "。旗の画像は game-assets/_common/objects/flag_red_a.png（64×64）を貼る。HTMLからの相対パスで読む。PNGの中身は埋め込まない。図形で描き直さない";
+      }
+      if(key === "lives" && (v === "one" || v === "three")){
+        line += "。ハートは kit.hud({hearts: 残りの数, maxHearts: " + (v === "one" ? 1 : 3) + "}) で出す（ハートの絵は kit が左上に貼る）。自分で描かない";
+      }
+      md += line + '\n\n';
+    });
+    md = dedupeSpec(md);
+
+    md += '## 技術要件\n';
+    md += '- HTML / CSS / JavaScript を1つのHTMLファイルにまとめる。ファイル名は game.html にして、AGENTS.md と同じフォルダに作る。音と画面の部品だけは game-assets/_js/sound.js と game-kit.js を読み込む（下の節を見る）\n';
+    md += '- 画像は、この仕様に書いた game-assets のPNGを、HTMLからの相対パスで読んで貼る。PNGの中身はHTMLに埋め込まない。図形で描き直さない（この仕様の画像すべて）\n';
+    md += '- Canvas 2D と Vanilla JavaScript（素のJavaScript）だけで実装する。外部ライブラリ・ゲームエンジンは使用しない\n';
+    md += '- 画面は 960×540。座標はいつも 960×540 で考える\n';
+    md += '- キーボード操作を基本とする。ジャンルの仕様にマウスと書いてあるときは、マウスのクリックでも遊べるようにする\n\n';
+
+    md += '## 画面の部品（game-kit.js）\n';
+    md += '- game.html のゲームのスクリプトより前に、次の2行をこの順で書く: <script src="game-assets/_js/sound.js"><\/script> と <script src="game-assets/_js/game-kit.js"><\/script>\n';
+    md += '- ゲームは kit.start({images: {名前: "パス", ...}, update(dt), draw(ctx)}) で始める。canvas・画面の大きさ合わせ・ゲームループ・画像の読み込み・背景・ハートや点数の表示・タイトルなどの画面は kit がする。自分で canvas を作ったり、requestAnimationFrame や resize や new Image を書いたりしない。game-kit.js の中身を書き写さない\n';
+    md += '- 絵: kit.draw("名前", x, y, w, h, {flip, alpha, angle})（x, y は左上。angle はラジアン）、kit.img("名前")\n';
+    md += '- 入力: kit.down("ArrowLeft")（押しているあいだ）、kit.pressed("Enter")（押した瞬間。スペースは " "）、kit.click（クリックした瞬間だけ {x, y}）\n';
+    md += '- 表示: kit.hud({hearts, maxHearts, score, time, info}) でハート（左上）・時間（上のまん中）・点数（右上）を出す。使わないものは書かない。周回数などは info: ["LAP", "2/3"] のように英語のラベルで渡す\n';
+    md += '- 操作の案内: kit.guide([["←→", "MOVE"], ["SPACE", "JUMP"]]) のように、キーと英語1語で渡す（画面の下に出る）\n';
+    md += '- 画面: タイトルは kit.screen({kind: "title", title: "ゲームの名前", lines: ["目的を1行"], keys: 操作の案内と同じ形})。クリアは kit.screen({kind: "clear", score})、ゲームオーバーは kit.screen({kind: "over", score})。ゲーム中は kit.screen(null)。Enter でスタート・もう一回にするのは update の中で kit.pressed("Enter") を見て書く\n';
+    md += '- 演出: kit.sparks(x, y)（キラキラが飛ぶ）、kit.popup("+10", x, y)（文字が浮かぶ）、kit.text("文字", x, y, {size, color, align})（縁取りのある文字）、kit.hit(a, b)（{x, y, w, h} どうしの当たり判定）\n';
+    md += '- kit が出す表示（SCORE・TIME・STAGE CLEAR! など）は英語。自分で出す文字も短くする\n';
+    if(selectedGenre() === "rpg"){
+      md += '- RPG の部品（update の中で毎フレームよぶ。よんでいるあいだだけ出る）: コマンドは const c = kit.menu(["たたかう", ...], "どうする？")（左下にコマンド、右下に問いかけ。↑↓と Enter・クリックで選ぶと、そのフレームだけ番号を返す。ほかは -1）。'
+        + 'メッセージは kit.message("スライムが あらわれた！")（下の枠に1文字ずつ出し、出しきってから Enter・クリックで true を返す。true になったら次の場面へ進める）。'
+        + '敵のHPは draw の中で kit.enemyHp(残り, 最大, 敵のまん中の x, 敵の絵の上はしの y) でHPのバーを出す（kit が絵の少し上に出す）。コマンド・メッセージ・HP の枠や文字は自分で描かない。言葉は日本語\n';
+    }
+    md += '- 音: kit が最初のキーかクリックで startAudio() をよび、毎フレーム updateBgm(dt) をよび、Mキーと右上のボタンで muted を切りかえる。自分では書かない\n\n';
+
+    md += '## シーン管理\n';
+    md += '- let scene = "title"; のような文字列（title / game / clear / over）で分け、update と draw の中で scene ごとに処理を分ける。SceneManager などのクラスは作らない\n\n';
+
+    md += '## 実装方針\n';
+    md += '- 「きれいな設計」より「子どもが読んで分かりやすいコード」を優先する\n';
+    md += '- 不要なクラス、抽象化、デザインパターンを作らない\n';
+    md += '- 選択されたジャンル・画面・操作・敵・クリア条件を実際のゲームの挙動に反映する\n';
+    md += '- 選択されていない機能を勝手に追加しない\n';
+    md += '- 選ばれた組み合わせのせいで遊びにくくなっても（よけられない、攻撃する相手がいない など）、勝手に直したり機能を足したりせず、選ばれたとおりに作る\n';
+    if(answers.difficulty){
+      if(selectedGenre() === "rpg"){
+        md += '- 難易度は敵のHPだけ変える。速度・敵の数・制限時間・出現頻度は変えない\n';
+      } else if(selectedGenre() === "puzzle"){
+        md += '- 難易度は速さと、制限時間ありのときの秒数、種類の質問に書いてある数だけ変える。敵は出さない\n';
+      } else {
+        md += '- 難易度は、難易度の質問に書いたものだけ変える\n';
+      }
+    }
+    md += '- ブラウザでHTMLファイルを開いた時点で遊べる状態にする\n\n';
+
+    md += '## 小学生が楽しめるようにする（全ジャンル共通）\n';
+    if(selectedGenre() === "puzzle"){
+      md += '- 1回遊ぶ時間は30〜90秒くらいを目安にする。数秒で終わる長さや、何分もかかる長さにしない（2人で遊ぶボードゲームと、制限時間なしのパズルは除く）\n';
+    } else {
+      md += '- 1回遊ぶ時間は30〜90秒くらいを目安にする。数秒で終わる長さや、何分もかかる長さにしない（2人で遊ぶボードゲームは除く）\n';
+    }
+    if(selectedGenre() === "racing"){
+      md += '- レーシングの車と道にあるものは、仕様に書いたPNGを貼る。道・地面・景色は kit が描く\n';
+    } else if(selectedGenre() === "board"){
+      md += '- ボードゲームの左右のアイコンは、ジャンルの仕様どおり。駒・石・カードに、主人公と敵の顔は描かない。まるばつの○と×は駒なので、そのまま置く\n';
+    } else {
+      md += '- 主人公と敵は、指定したPNGを使う。顔を描き直さない\n';
+    }
+    md += '- 当たった・倒した・消した・取った・クリアしたときは、見た目の演出を入れる（kit.sparks・kit.popup、ぱっと光る、点滅する など）\n';
+    md += '- 演出で点数・アイテム・ルールは増やさない。見た目の演出と、下の「音」は「選択されていない機能」には当たらない\n';
+    md += '- 敵や障害物が出るゲームは、始まってから3秒は出さず、操作に慣れる時間にする\n';
+    md += '- タイトルは kit.screen の title にゲームの名前、lines に目的（どうしたらクリアか）を1行、keys に操作を入れる（HOW TO PLAY のボタンで見られる）。ゲーム中は kit.guide で操作を出す\n';
+    md += '- クリアとゲームオーバーは kit.screen で出し、Enterキーでもう一回遊べるようにする\n\n';
+
+    md += '## 音（全ジャンル共通）\n';
+    md += '- 効果音とBGMを入れる。使うのは sound.js の se(名前) と、変数 bgmOn（true で BGM を流す）・bgmSong（BGM の曲）だけ。音を鳴らす関数・音声ファイル・別の鳴らし方は自分で作らない。sound.js の中身を書き写さない\n';
+    md += '- BGM は次の11曲から、ゲームの内容に合う曲を選んで bgmSong = "D" のように入れる。場面で変えてもよい（タイトル・ボス戦など）。ここにない曲は作らない: B げんき（明るい行進）、C のんびり（ゆっくりやさしい）、D ぼうけん（ドキドキ・短調）、E ふしぎ（宇宙・ふわっと）、F ファミコン風（ピコピコ・速い）、G きらきら（かわいい）、H ゆうしゃ（勇ましい）、I まち（おしゃれ・軽い）、J うみ（波のようにゆったり）、K おばけやしき（ちょっとこわい）、L スピード（とても速い）\n';
+    md += '- 効果音は、そのゲームにある動作で鳴らす（ない動作は鳴らさない。毎フレームは鳴らさない）。名前はこの10個だけ: '
+      + 'click＝マウスで選ぶ・カードをめくる・マスやコマンドを決める・タイトルで始める／'
+      + 'move＝カーソルや1マスの移動（テトリスの横移動は1マスごと、スライドのタイル、迷路の1歩。歩き続けるゲームは歩き始めの1回だけ）／'
+      + 'turn＝ブロックの回転（向きが変わったら必ず）／drop＝ブロックの固定・ジャンプの着地（列も消えたら good も）／'
+      + 'jump＝ジャンプ／shot＝攻撃や弾／hit＝ダメージ／good＝倒す・消す・取る・列を消す・カードがそろう／clear・over＝クリア・ゲームオーバーで1回\n';
+    md += '- ゲーム中だけ bgmOn = true にする。タイトル・クリア・ゲームオーバーでは bgmOn = false\n';
+    md += '\n';
+
+
+    md += imageSizeSection(md);
+    return {md, missing};
+  }
+
+  function renderPreview(){
+    const {md, missing} = buildMarkdown();
+    document.getElementById('preview').value = md;
+    const missingEl = document.getElementById('missing');
+    const makeBtn = document.getElementById('makeFileBtn');
+    const endSec = document.getElementById('s-end');
+    const endTitle = document.getElementById('endTitle');
+    endSec.classList.toggle('has-missing', missing.length > 0);
+    updateSaveButton(missing.length);
+    if(missing.length){
+      endTitle.innerHTML = END_TITLE_LOCKED;
+      missingEl.innerHTML = '<p class="miss-lead">まだ<ruby>答<rt>こた</rt></ruby>えていない<ruby>質問<rt>しつもん</rt></ruby>があるよ。<br><ruby>押<rt>お</rt></ruby>すと、その<ruby>質問<rt>しつもん</rt></ruby>に<ruby>戻<rt>もど</rt></ruby>るよ</p>';
+      const list = document.createElement('div');
+      list.className = 'miss-list';
+      missing.forEach(function(k){
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'miss-chip';
+        chip.innerHTML = QUESTION_TITLES[k];
+        chip.addEventListener('click', function(){
+          const idx = sectionIndexByKey(k === 'difficulty' ? 'final' : k);
+          if(idx >= 0) goTo(idx);
+        });
+        list.appendChild(chip);
+      });
+      missingEl.appendChild(list);
+    } else {
+      endTitle.innerHTML = END_TITLE_FOUND;
+      missingEl.innerHTML = '';
+    }
+  }
+  const END_TITLE_FOUND = '<ruby>宝箱<rt>たからばこ</rt></ruby>を<ruby>見<rt>み</rt></ruby>つけたよ！';
+  const END_TITLE_LOCKED = '<ruby>宝箱<rt>たからばこ</rt></ruby>はまだ<ruby>開<rt>あ</rt></ruby>かないよ';
+
+  function spark(ev){
+    if(!ev) return;
+    const el = document.createElement('div');
+    el.className = 'pop';
+    el.textContent = ['⭐','💎','🚩','✨'][Math.floor(Math.random()*4)];
+    el.style.left = ev.clientX + 'px';
+    el.style.top = ev.clientY + 'px';
+    document.body.appendChild(el);
+    setTimeout(function(){ el.remove(); }, 700);
+  }
+
+  let saving = false;
+  let savedKey = null;            // 保存したときの答え。同じ答えのままなら、もう保存しない
+  const DOWNLOAD_PAUSE = 900;     // 演出が終わってから、ダウンロードするまでの間（ミリ秒）
+
+  function answersKey(){
+    return activeQuestionKeys().map(function(k){ return k + ':' + (answers[k] ? answers[k].value : ''); }).join('|');
+  }
+
+  // 保存ボタン：未回答なら押せない。保存したあと（答えが同じ）は「保存したよ」を出したままにする
+  function updateSaveButton(missingCount){
+    const btn = document.getElementById('makeFileBtn');
+    const saved = savedKey !== null && savedKey === answersKey();
+    btn.disabled = missingCount > 0;
+    document.getElementById('saveNote').hidden = !saved;
+  }
+
+  // 演出を見せてから、AGENTS.md をダウンロードする。
+  // 演出は押すたびに出す。ダウンロードは同じ答えでは1回だけ（答えを変えるか「次の冒険へ」でまたできる）
+  function createFile(){
+    if(saving) return;
+    const {md, missing} = buildMarkdown();
+    if(missing.length){ renderPreview(); return; }
+    const key = answersKey();
+    const download = savedKey !== key;
+    saving = true;
+    const wait = playSaveEffects();
+    setTimeout(function(){
+      saving = false;
+      if(!download) return;
+      const blob = new Blob([md], {type:'text/markdown;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'AGENTS.md';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(url), 2000);
+      savedKey = key;
+      updateSaveButton(0);
+    }, wait + (download ? DOWNLOAD_PAUSE : 0));
+  }
+
+  function mountQuestionChrome(){
+    document.querySelectorAll('.section').forEach(function(sec){
+      if(sec.id === 's-start' || sec.querySelector(':scope > .q-stage')) return;
+      const stage = document.createElement('div');
+      stage.className = 'q-stage';
+      while(sec.firstChild) stage.appendChild(sec.firstChild);
+      sec.appendChild(stage);
+    });
+    document.querySelectorAll('.qtitle').forEach(function(title){
+      // タイトルの文字を1つにまとめる（ふりがなごとに縦に分かれないように）
+      const text = document.createElement('span');
+      text.className = 'qtitle-text';
+      while(title.firstChild) text.appendChild(title.firstChild);
+      title.appendChild(text);
+      const sub = title.nextElementSibling;
+      if(sub && sub.classList.contains('qsub')) title.appendChild(sub);
+    });
+    function fitImage(src, apply){
+      const img = new Image();
+      img.src = src;
+      function run(){
+        if(!img.naturalWidth || !img.naturalHeight) return;
+        apply(img.naturalWidth, img.naturalHeight);
+      }
+      if(img.complete) run();
+      else img.addEventListener('load', run);
+    }
+    function fitEach(src, selector){
+      fitImage(src, function(w, h){
+        document.querySelectorAll(selector).forEach(function(el){
+          el.style.width = w + 'px';
+          el.style.height = h + 'px';
+        });
+      });
+    }
+    fitEach('image/contents/bg_frame.png', '.q-stage');
+    fitEach('image/contents/title_frame.png', '.qtitle, #s-end h1');
+    fitEach('image/contents/btn/btn_default.png', '.option');
+    fitEach('image/top/btn/btn_default.png', '.btn-start');
+    fitEach('image/contents/btn_treasure/btn_default.png', '#s-end .btn-save');
+    fitEach('image/contents/btn_treasure/btn_default_small.png', '#s-end .btn-home');
+    fitImage('image/contents/bg_FAB.png', function(w, h){
+      document.documentElement.style.setProperty('--fab-w', w + 'px');
+      document.documentElement.style.setProperty('--fab-h', h + 'px');
+    });
+  }
+
+  function showRandomGenres(){
+    const group = document.querySelector('.options[data-key="genre"]');
+    if(!group) return;
+    // 6つの場所は決まった並び。7つ目のジャンルは、隠したジャンルの場所に入る（動くのは1か所だけ）
+    const SLOTS = ["action","shooting","runner","racing","rpg","board"];
+    const EXTRA = "puzzle";
+    const btnOf = function(v){ return group.querySelector('.option[data-value="'+v+'"]'); };
+    const hide = randomOf(SLOTS.concat(EXTRA));
+    const order = SLOTS.map(function(v){ return v === hide ? EXTRA : v; });
+    order.forEach(function(v){
+      const btn = btnOf(v);
+      btn.hidden = false;
+      group.appendChild(btn);
+    });
+    const hiddenBtn = btnOf(hide);
+    hiddenBtn.hidden = true;
+    group.appendChild(hiddenBtn);
+  }
+
+  // フレーム（1430×810）＋上の地図（150px）＋下の余白（36px）が画面に収まるように縮める。大きくはしない
+  function applyScale(){
+    const s = Math.min(1, (window.innerWidth - 40) / 1430, window.innerHeight / (150 + 810 + 36));
+    document.documentElement.style.setProperty('--s', Math.max(0.3, s).toFixed(4));
+  }
+  let resizeTimer = 0;
+  window.addEventListener('resize', function(){
+    applyScale();
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function(){ scrollToVisibleIndex(lastActiveIndex, 'auto'); }, 150);
+  });
+
+  applyScale();
+  showRandomGenres();
+  applyIcons();
+  mountQuestionChrome();
+  refreshGenreQuestions();
+  rebuildDots();
+  setupObserver();
+  updateDots(0);
+  renderPreview();
+  if('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  history.replaceState(quizHistoryState(sectionKey(visibleSections()[0])), '');
+  window.addEventListener('popstate', function(e){
+    // 前の人の回答（リセット前の履歴）には戻らない
+    if(!e.state || e.state.session !== quizSession){
+      history.pushState(quizHistoryState(sectionKey(visibleSections()[lastActiveIndex] || visibleSections()[0])), '');
+      return;
+    }
+    applyHistoryState(e.state);
+  });
+</script>
+</body>
+</html>
