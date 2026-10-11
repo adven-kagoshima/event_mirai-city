@@ -879,7 +879,7 @@
       <button class="option" data-value="action" data-md="ジャンル：アクション。主人公を動かしてステージを進み、ゴールを目指す。左右に歩く。ボタンでジャンプ。飛ばない。遠距離攻撃はなし。画面の進み方・攻撃・敵・ゴールの見た目は、それぞれの質問に従う。床のほかに足場を置く。穴の数と、穴に落ちたときの戻り先は、画面の進み方の質問に従う。ジャンプはボタンを長く押すと高く跳び、すぐ離すと低く跳ぶ。足場や床から歩き出した直後（0.1秒ほど）でもジャンプできる。穴の幅は、小（ジャンプ1回で楽に越える）・中（ふつうに越える）・大（足場を踏んで渡る）を混ぜる。足場の高さもそろえず、ジャンプ1回で乗れる高さと、足場を乗りついで登る高さを混ぜる。主人公のジャンプは、ながおしで約4.5マス（288px）の高さまで届く。上下の床や足場の上面の差は2〜3マス。真上に重なる足場は3マス以上はなす（下を歩けるように）。難易度は数ではなく中身で変える。やさしいは穴がせまく敵がゆっくり、ふつうは標準、むずかしいは穴が広く敵が速く足場の間隔が広い。どの難易度でも、ジャンプを考える場所を必ず1か所は作る。ハートの増減とゲームオーバーはハートの質問に従う。点数はゴールに着くか、倒した敵の数だけ。アイテムは置かない"><span class="mark">✓</span><span class="label"><b>アクション</b><small>ジャンプ・<ruby>攻撃<rt>こうげき</rt></ruby>・ステージ<ruby>攻略<rt>こうりゃく</rt></ruby></small></span></button>
       <button class="option" data-value="shooting" data-md="ジャンル：シューティング。自機・敵・背景は、主人公の色の質問に書いたPNGを貼る。図形で描き直さない。自機は今見えている画面の中だけ動く。画面の端は壁。外に出ない。端ではハートは減らない。弾を発射する。弾の絵は主人公の色の質問に書いたPNGを貼る。図形で描き直さない。弾が当たったら敵は消える。画面をつらぬく長い光線、連射・複数弾は作らない。ボスは作らない。敵に触れるとハートが1つ減る。0で負け。敵は弾を撃たない。クリアは制限時間が0になるまで生き残ること。敵に触れないように耐える。時間はやさしい30秒、ふつう45秒、むずかしい60秒。敵は時間が終わるまで出し続ける。点数は倒した敵の数だけ。アイテムは置かない。パワーアップは出さない。難易度は敵の速さ・出現の間隔と、上に書いた制限時間だけ変える。弾の種類は増やさない"><span class="mark">✓</span><span class="label"><b>シューティング</b><small><ruby>撃<rt>う</rt></ruby>つ・<ruby>避<rt>さ</rt></ruby>ける</small></span></button>
       <button class="option" data-value="runner" data-md="ジャンル：ランナー。横から見る。主人公は自動で進み、障害物を避ける。上から見る視点は使わない（それはレーシング）。広いマップや、カメラが主人公を追う処理は作らない。点数は進んだ距離だけ。コースにアイテムは置かない。敵を倒して点数は増やさない"><span class="mark">✓</span><span class="label"><b>ランナー</b><small><ruby>走<rt>はし</rt></ruby>る・<ruby>避<rt>さ</rt></ruby>ける</small></span></button>
-      <button class="option" data-value="racing" data-md="ジャンル：レーシング。上から見る2Dの縦スクロール。道は下から上へ続き、車は上へ進む。後ろから見る3D風の視点は使わない。歩いている主人公は出さない。道・地面・道のわきの景色は kit が描くので、自分で描かない。ゲームの始めに kit.road({curvy, length, laps, ground}) を1回よぶ（値はコースの形・コースの長さ・舞台の質問のとおり）。距離 d はスタートの線が 0 で、上へ進むほど大きくなる。毎フレーム kit.scroll(0, -自分の距離) を渡すと道が流れ、自分の車は画面の y=400 あたりに来る。距離 d の場所の道のまん中の x は kit.roadX(d)、画面の y は kit.screenY(d)。車もじゃまものも、距離と、道のまん中からの横のずれで場所を持つ。道の走れる幅は kit.roadX(d) ± kit.roadHalf。操作：↑でアクセル（だんだん速くなる。最高速度は1秒に420px）、はなすと少しずつ遅くなる、↓でブレーキ、←→で左右に動く。道のはしより外へは出られない（止めるだけ。ハートは減らない）。車は回さず、いつも上向きで貼る。左右に動くときだけ少しかたむけてよい。スタートでは全員がスタートの線（d=0）の後ろに2列で並び、自分はいちばん後ろ。3・2・1・GO と数えてから走り出す。相手の車はCPU。それぞれ決まった速さで kit.roadX(d) にそって進み、ときどき左右に少し動く。ぶつかるじゃまものは手前で横によける。相手の車にぶつかったら自分が少し遅くなる（ハートは減らない）。車同士は重ならない。いま何位かを kit.hud の info で出す（例 [&quot;POS&quot;, &quot;3/8&quot;]）。ゴールしたらクリアにして、クリアの画面に順位を出す。点数はゴールした順位で決める（1位がいちばん多い）。弾は作らない。難易度はCPUの速さだけ変える。高度なAIは作らない"><span class="mark">✓</span><span class="label"><b>レーシング</b><small><ruby>走<rt>はし</rt></ruby>る・<ruby>競争<rt>きょうそう</rt></ruby>する</small></span></button>
+      <button class="option" data-value="racing" data-md="ジャンル：レーシング。上から見る2Dの縦スクロール。道は下から上へ続き、車は上へ進む。後ろから見る3D風の視点は使わない。歩いている主人公は出さない。道・地面・道のわきの景色は kit が描くので、自分で描かない。ゲームの始めに kit.road({curvy, length, laps, ground}) を1回よぶ（値はコースの形・コースの長さ・舞台の質問のとおり）。距離 d はスタートの線が 0 で、上へ進むほど大きくなる。毎フレーム kit.scroll(0, -自分の距離) を渡すと道が流れ、自分の車は画面の y=400 あたりに来る。距離 d の場所の道のまん中の x は kit.roadX(d)、画面の y は kit.screenY(d)。車もじゃまものも、距離と、道のまん中からの横のずれで場所を持つ。道の走れる幅は kit.roadX(d) ± kit.roadHalf。操作：↑でアクセル（だんだん速くなる。最高速度は1秒に420px）、はなすと少しずつ遅くなる、↓でブレーキ、←→で左右に動く。道のはしより外へは出られない（止めるだけ。ハートは減らない）。車は回さず、いつも上向きで貼る。左右に動くときだけ少しかたむけてよい。スタートでは、スタートの線（d=0）の後ろに、横に最大4台ずつ並ぶ。横は kit.roadX(d) から -165・-55・55・165、1列ごとに150pxうしろ（d=-120・-270）。自分はいちばん後ろの列。前後左右にすき間をあけ、スタート直後にぶつからないようにする。3・2・1・GO と数えてから走り出す。相手の車はCPU。それぞれ決まった速さで kit.roadX(d) にそって進み、ときどき左右に少し動く。ぶつかるじゃまものは手前で横によける。相手の車にぶつかったら自分が少し遅くなる（ハートは減らない）。車同士は重ならない。いま何位かを kit.hud の info で出す（例 [&quot;POS&quot;, &quot;3/8&quot;]）。ゴールしたらクリアにして、クリアの画面に順位を出す。点数はゴールした順位で決める（1位がいちばん多い）。弾は作らない。難易度はCPUの速さだけ変える。高度なAIは作らない"><span class="mark">✓</span><span class="label"><b>レーシング</b><small><ruby>走<rt>はし</rt></ruby>る・<ruby>競争<rt>きょうそう</rt></ruby>する</small></span></button>
       <button class="option" data-value="rpg" data-md="ジャンル：RPG。戦闘画面のみ。コマンドを選んで敵と戦う。マップ移動や探索は作らない。戦闘は1画面。カメラは作らない。同時に出る敵は1体。出現する数は質問の指定どおり。この数にボスは含めない。つぎつぎ出てくるは3体。指定数を超えて出さない。使えるコマンドはコマンドの質問に従う。回復はどのコマンドにもある。ハートを1つ戻す（上限まで）。回数制限なし。敵のこうげきは質問の確率で、毎ターン独立に決める。前のターンの結果は使わない。攻撃しないターンは「ちからを ためている」と出す。するときは自分のコマンドのあと。固定の順番にはしない。倒された敵はこうげきしない。敵を倒すと、ハートは全部もどる。ハートの数は主人公のHP。敵のこうげきを受けると1つ減る。0で負け。ハートなしのときは倒れない。接触ダメージや障害物は作らない。MP・経験値・レベルは作らない。にげたらゲームオーバー。クリアにしない。クリアは、すべての敵を倒すこと。ボスがいるときは最後に1体出て、そのボスを倒したらクリア。点数は倒した敵の数だけ。アイテムは置かない。難易度は敵のHPだけ変える。HPの数は難易度の質問に書く。速度・敵の数・制限時間・出現頻度は変えない。"><span class="mark">✓</span><span class="label"><b>RPG</b><small>コマンドで<ruby>戦<rt>たたか</rt></ruby>う</small></span></button>
       <button class="option" data-value="board" data-md="ジャンル：ボードゲーム。まるばつ・神経衰弱・オセロから選ぶ。2人で交互に遊ぶ。コンピューター（CPU）は作らない。マスやカードはマウスでクリックして選べる。矢印キーとEnterでも選べる。いまどちらの番かを大きく表示する。盤の左は主人公の画像、右は敵の画像。駒・石・カードに、主人公と敵の顔は描かない。まるばつの○と×は駒なので、そのまま置く。"><span class="mark">✓</span><span class="label"><b>ボードゲーム</b><small><ruby>2人<rt>ふたり</rt></ruby>で<ruby>遊<rt>あそ</rt></ruby>ぶ</small></span></button>
       <button class="option" data-value="puzzle" data-md="ジャンル：パズル。ブロックやマスを操作して問題を解く。盤全体を1画面に収める。カメラは作らない。クリア条件は種類の質問に従う。点数を数えるときは、種類の質問の足し方だけ。アイテムは置かない。難易度は速さ・制限時間と、種類の質問に書いてある数だけ変える。敵は出さない"><span class="mark">✓</span><span class="label"><b>パズル</b><small>テトリスなど</small></span></button>
@@ -999,7 +999,7 @@
     <div class="qtitle">どう<ruby>進<rt>すす</rt></ruby>む？</div><div class="qsub"><ruby>横<rt>よこ</rt></ruby>から<ruby>見<rt>み</rt></ruby>る。<ruby>上<rt>うえ</rt></ruby>から<ruby>見<rt>み</rt></ruby>るのはレーシング</div>
     <div class="options" data-key="runner-view">
       <button class="option" data-value="run" data-md="ランナー：よこに走る。横から見る。右へ自動で進む。主人公の画面上の位置はほぼ固定。自分で走って進まない。ステージの長さは画面8枚ぶんが目安。難易度で短く長くしてよい。障害物はだいたい2秒に1回。広いマップやカメラ追従は作らない。上から見る視点は使わない。点数は進んだ距離だけ。アイテムは置かない"><span class="mark">✓</span><span class="label"><b><ruby>横<rt>よこ</rt></ruby>に<ruby>走<rt>はし</rt></ruby>る</b></span></button>
-      <button class="option" data-value="fall" data-md="ランナー：したに落ちる。横から見る。下へ自動で落ちる。左右に動いてよける。広いマップや、カメラが主人公を追う処理は作らない。上から見る視点は使わない。長さの目安は画面8枚ぶん落ちる。障害物はだいたい2秒に1回。点数は落ちた距離だけ。アイテムは置かない"><span class="mark">✓</span><span class="label"><b><ruby>下<rt>した</rt></ruby>に<ruby>落<rt>お</rt></ruby>ちる</b></span></button>
+      <button class="option" data-value="fall" data-md="ランナー：したに落ちる。横から見る。下へ自動で落ちる。左右に動いてよける。広いマップや、カメラが主人公を追う処理は作らない。上から見る視点は使わない。落ちる速さは1秒に260pxくらい（難易度で変える）。長さは、いちばん下まで約40秒（約10,000px）。障害物はだいたい2秒に1回。点数は落ちた距離だけ。アイテムは置かない"><span class="mark">✓</span><span class="label"><b><ruby>下<rt>した</rt></ruby>に<ruby>落<rt>お</rt></ruby>ちる</b></span></button>
     </div>
   </section>
   <section class="section genre-question" data-q="runner-jump" data-genres="runner" data-runner-types="run">
@@ -1045,7 +1045,7 @@
   <section class="section genre-question" data-q="runner-goal-fall" data-genres="runner" data-runner-types="fall">
     <div class="qtitle">どうなったら<ruby>勝<rt>か</rt></ruby>ち？</div><div class="qsub"><ruby>下<rt>した</rt></ruby>に<ruby>落<rt>お</rt></ruby>ちるとき</div>
     <div class="options" data-key="runner-goal-fall">
-      <button class="option" data-value="flag" data-md="ランナーのクリア：いちばん下の旗に触れたらクリア。長さの目安は画面8枚ぶん落ちる。難易度で短く長くしてよい"><span class="mark">✓</span><span class="label"><b>いちばん<ruby>下<rt>した</rt></ruby>の<ruby>旗<rt>はた</rt></ruby></b></span></button>
+      <button class="option" data-value="flag" data-md="ランナーのクリア：いちばん下の旗に触れたらクリア。落ちる速さは1秒に260pxくらい（難易度で変える）。長さは、いちばん下まで約40秒（約10,000px）。難易度で短く長くしてよい"><span class="mark">✓</span><span class="label"><b>いちばん<ruby>下<rt>した</rt></ruby>の<ruby>旗<rt>はた</rt></ruby></b></span></button>
       <button class="option" data-value="survive" data-md="ランナーのクリア：制限時間が0になるまで落ち続けたらクリア。時間はやさしい30秒、ふつう45秒、むずかしい60秒"><span class="mark">✓</span><span class="label"><b><ruby>時間<rt>じかん</rt></ruby>まで<ruby>耐<rt>た</rt></ruby>える</b></span></button>
     </div>
   </section>
@@ -1536,7 +1536,7 @@
     if(answers["rpg-boss"].value === "yes"){
       t += "ボスの絵は game-assets/rpg/" + boss + ".png。高さ240px前後で、敵より大きく出す。\n";
     }
-    t += "レベル1の敵とレベル2の敵は高さ160px前後で、画面の右に置く。主人公は左。主人公と敵の足もとは y=330 より上にする（下は kit のコマンドとメッセージの枠）。モンスターは正面向きの絵なので、反転しない。\n";
+    t += "レベル1の敵とレベル2の敵は高さ160px前後で、画面の右に置く。主人公は左。主人公と敵の足もとは y=320 にそろえる（kit が y=320 から下に地面をしく。下は kit のコマンドとメッセージの枠）。モンスターは正面向きの絵なので、反転しない。\n";
     t += "敵のこうげきは、敵が少し前に飛び出す動きで見せる。ダメージを受けたら点滅して少しゆれる。倒したら小さくなって消え、キラキラが飛ぶ。モンスターの絵は増やさない";
     return t;
   }
@@ -1642,8 +1642,9 @@
     } else if(genre === "rpg" || genre === "board" || genre === "puzzle"){
       move = "画面は動かないので kit.scroll は呼ばない";
     }
+    const rpg = genre === "rpg";                                  // RPG は足もとに地面をしき、月や太陽は出さない（敵のHPと重なるので）
     return "\n背景は、ゲームの始めに1回だけ kit.background({far: \"" + dir + bg.far + "\", mid: \"" + dir + bg.mid + "\""
-      + (bg.near ? ", near: \"" + dir + bg.near + "\"" : "") + "}) で設定する。"
+      + (bg.near && !rpg ? ", near: \"" + dir + bg.near + "\"" : "") + (rpg ? ", floor: 320" : "") + "}) で設定する。"
       + "背景の絵は kit が奥から順に描くので、自分で描かない。図形で描き直さない。" + move;
   }
 
@@ -2413,9 +2414,9 @@
       return "難易度：" + name + "。" + body + "。ほかは変えない";
     }
     if(g === "runner"){
-      const body = v === "easy" ? "進む（落ちる）速さはゆっくり。障害物はだいたい2.5秒に1回"
-        : v === "hard" ? "進む（落ちる）速さは速い。障害物はだいたい1.5秒に1回"
-        : "進む（落ちる）速さは標準。障害物はだいたい2秒に1回";
+      const body = v === "easy" ? "進む（落ちる）速さはゆっくり（落ちるなら1秒に210px）。障害物はだいたい2.5秒に1回"
+        : v === "hard" ? "進む（落ちる）速さは速い（落ちるなら1秒に320px）。障害物はだいたい1.5秒に1回"
+        : "進む（落ちる）速さは標準（落ちるなら1秒に260px）。障害物はだいたい2秒に1回";
       return "難易度：" + name + "。" + body + "（質問の「だいたい2秒に1回」は、ふつうのときの目安）。ほかは変えない";
     }
     if(g === "racing"){
@@ -2453,7 +2454,7 @@
     md += '以下の仕様を優先して、ブラウザで遊べるゲームを実装してください。\n\n';
 
     md += '## ゲームの内容\n';
-    md += '### ゲームタイトル\n' + autoGameTitle() + '\n\n';
+    md += '### ゲームタイトル\n選んだ内容（ジャンル・舞台・主人公）に合う、短くて楽しい名前を日本語で付ける（12文字くらいまで）。「' + autoGameTitle() + '」のようなジャンル名だけにはしない\n\n';
 
     keys.forEach((key,i)=>{
       md += '### ' + (i+1) + '. ' + stripRubyHtml(QUESTION_TITLES[key]) + '\n';
@@ -2555,10 +2556,10 @@
     md += '- 絵: kit.draw("名前", x, y, w, h, {flip, alpha, angle})（x, y は左上。angle はラジアン）、kit.img("名前")\n';
     md += '- 入力: kit.down("ArrowLeft")（押しているあいだ）、kit.pressed("Enter")（押した瞬間。スペースは " "）、kit.click（クリックした瞬間だけ {x, y}）\n';
     md += '- 表示: kit.hud({hearts, maxHearts, score, time, info}) でハート（左上）・時間（上のまん中）・点数（右上）を出す。使わないものは書かない。周回数などは info: ["LAP", "2/3"] のように英語のラベルで渡す\n';
-    md += '- 操作の案内: kit.guide([["←→", "MOVE"], ["SPACE", "JUMP"]]) のように、キーと英語1語で渡す（画面の下に出る）\n';
+    md += '- 操作の案内: kit.guide([["←→", "MOVE"], ["SPACE", "JUMP"]]) のように、キーと英語1語で渡す（画面の下に出る）。ゲーム中に使うキーだけ。Enter と M は書かない\n';
     md += '- 画面: タイトルは kit.screen({kind: "title", title: "ゲームの名前", lines: ["目的を1行"], keys: 操作の案内と同じ形})。クリアは kit.screen({kind: "clear", score})、ゲームオーバーは kit.screen({kind: "over", score})。ゲーム中は kit.screen(null)。Enter でスタート・もう一回にするのは update の中で kit.pressed("Enter") を見て書く\n';
     md += '- 演出: kit.sparks(x, y)（キラキラが飛ぶ）、kit.popup("+10", x, y)（文字が浮かぶ）、kit.text("文字", x, y, {size, color, align})（縁取りのある文字）、kit.hit(a, b)（{x, y, w, h} どうしの当たり判定）\n';
-    md += '- kit が出す表示（SCORE・TIME・STAGE CLEAR! など）は英語。自分で出す文字も短くする\n';
+    md += '- kit が出す表示（SCORE・TIME・STAGE CLEAR! など）は英語。自分で出す文字（ゲームの名前・目的・メッセージなど）は日本語で、短くする\n';
     if(selectedGenre() === "rpg"){
       md += '- RPG の部品（update の中で毎フレームよぶ。よんでいるあいだだけ出る）: コマンドは const c = kit.menu(["たたかう", ...], "どうする？")（左下にコマンド、右下に問いかけ。↑↓と Enter・クリックで選ぶと、そのフレームだけ番号を返す。ほかは -1）。'
         + 'メッセージは kit.message("スライムが あらわれた！")（下の枠に1文字ずつ出し、出しきってから Enter・クリックで true を返す。true になったら次の場面へ進める）。'
