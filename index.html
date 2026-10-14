@@ -1266,7 +1266,7 @@
             <span class="end-copy"><ruby>次<rt>つぎ</rt></ruby>の<ruby>冒険<rt>ぼうけん</rt></ruby>へ</span>
           </span>
         </button>
-        <p id="saveNote" hidden><ruby>保存<rt>ほぞん</rt></ruby>したよ！ ファイルの<ruby>名前<rt>なまえ</rt></ruby>は AGENTS.md</p>
+        <p id="saveNote" hidden><ruby>保存<rt>ほぞん</rt></ruby>したよ！ ファイルの<ruby>名前<rt>なまえ</rt></ruby>は <span id="saveName">ゲームのもと.zip</span></p>
       </div>
     </div>
   </section>
@@ -2683,7 +2683,89 @@
     document.getElementById('saveNote').hidden = !saved;
   }
 
-  // 演出を見せてから、AGENTS.md をダウンロードする。
+  // ---------- ゲームのもと.zip（AGENTS.md と、そのゲームで使う素材をまとめる）----------
+  // GitHub Pages に置いた game-assets から、ジャンルと舞台に使うフォルダだけを集める（はじめる.bat のコピーと同じ決まり）
+  // 素材を足したり消したりしたら、game-assets/files.json も作り直す
+  const ZIP_NAME = "ゲームのもと.zip";
+  const ASSET_FOLDERS = {
+    action:   ["_common/hero", "_common/world/W", "_common/action_enemies"],
+    runner:   ["_common/hero", "_common/world/W", "_common/action_enemies"],
+    rpg:      ["_common/hero", "_common/world/W", "rpg"],
+    shooting: ["shooting", "_common/world/W"],
+    racing:   ["racing"],
+    board:    ["_common/hero", "_common/world/W", "board"],
+    puzzle:   ["_common/hero", "_common/world/W", "puzzle"]
+  };
+  const ASSET_ALWAYS = ["_common/objects", "_js", "_sounds", "_ui"];
+  const CRC_TABLE = (function(){
+    const t = [];
+    for(let n = 0; n < 256; n++){ let c = n; for(let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+    return t;
+  })();
+  function crc32(u8){ let c = 0xffffffff; for(let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+  // 圧縮しない zip（PNG・mp3 はもう圧縮されているので、大きさはほとんど変わらない）。名前は UTF-8
+  function makeZip(files){
+    const enc = new TextEncoder(), parts = [], central = [];
+    let offset = 0;
+    const now = new Date();
+    const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+    const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+    files.forEach(function(f){
+      const name = enc.encode(f.name), crc = crc32(f.data), size = f.data.length;
+      const h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+      h.setUint16(10, dosTime, true); h.setUint16(12, dosDate, true); h.setUint32(14, crc, true);
+      h.setUint32(18, size, true); h.setUint32(22, size, true); h.setUint16(26, name.length, true); h.setUint16(28, 0, true);
+      parts.push(h.buffer, name, f.data);
+      const c = new DataView(new ArrayBuffer(46));
+      c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true);
+      c.setUint16(12, dosTime, true); c.setUint16(14, dosDate, true); c.setUint32(16, crc, true);
+      c.setUint32(20, size, true); c.setUint32(24, size, true); c.setUint16(28, name.length, true);
+      c.setUint32(42, offset, true);
+      central.push(c.buffer, name);
+      offset += 30 + name.length + size;
+    });
+    const cdSize = central.reduce(function(n, b){ return n + b.byteLength; }, 0);
+    const e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+    e.setUint32(12, cdSize, true); e.setUint32(16, offset, true);
+    return new Blob(parts.concat(central, [e.buffer]), {type: "application/zip"});
+  }
+  async function buildGameZip(md){
+    const genre = selectedGenre(), world = answers.world ? answers.world.value : "";
+    const list = await (await fetch("game-assets/files.json", {cache: "no-cache"})).json();
+    const folders = (ASSET_FOLDERS[genre] || []).concat(ASSET_ALWAYS).map(function(f){ return f.replace("/W", "/" + world) + "/"; });
+    const need = list.files.filter(function(f){ return f === "License.txt" || folders.some(function(d){ return f.indexOf(d) === 0; }); });
+    const files = [{name: "AGENTS.md", data: new TextEncoder().encode(md)}];
+    const todo = need.concat(["このゲームの素材について.txt"]), got = new Array(todo.length);
+    async function get(f){                                        // 失敗したら、3回まで読み直す
+      const url = "game-assets/" + f.split("/").map(encodeURIComponent).join("/");
+      for(let i = 0; i < 3; i++){
+        try { const r = await fetch(url); if(r.ok) return new Uint8Array(await r.arrayBuffer()); } catch(e){}
+      }
+      throw new Error(f);
+    }
+    let next = 0;
+    async function worker(){                                      // 8つずつ並べて読む（一度にたくさん読むと失敗しやすい）
+      while(next < todo.length){
+        const i = next++, f = todo[i];
+        got[i] = {name: f === "このゲームの素材について.txt" ? f : "game-assets/" + f, data: await get(f)};
+      }
+    }
+    await Promise.all([0, 1, 2, 3, 4, 5, 6, 7].map(worker));
+    return makeZip(files.concat(got));
+  }
+  function setSaveNoteName(n){ const el = document.getElementById('saveName'); if(el) el.textContent = n; }
+  function downloadBlob(blob, name){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  }
+
+  // 演出を見せてから、ゲームのもと.zip（AGENTS.md と素材）をダウンロードする。
+  // 素材が読めないとき（パソコンの index.html を直接開いたときなど）は、AGENTS.md だけをダウンロードする
   // 演出は押すたびに出す。ダウンロードは同じ答えでは1回だけ（答えを変えるか「次の冒険へ」でまたできる）
   function createFile(){
     if(saving) return;
@@ -2693,18 +2775,14 @@
     const download = savedKey !== key;
     saving = true;
     const wait = playSaveEffects();
-    setTimeout(function(){
+    const zipping = download ? buildGameZip(md).catch(function(){ return null; }) : null;   // 演出のあいだに素材を集める
+    setTimeout(async function(){
+      if(!download){ saving = false; return; }
+      const zip = await zipping;
       saving = false;
-      if(!download) return;
-      const blob = new Blob([md], {type:'text/markdown;charset=utf-8'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'AGENTS.md';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(()=>URL.revokeObjectURL(url), 2000);
+      if(zip) downloadBlob(zip, ZIP_NAME);
+      else downloadBlob(new Blob([md], {type:'text/markdown;charset=utf-8'}), 'AGENTS.md');
+      setSaveNoteName(zip ? ZIP_NAME : 'AGENTS.md');
       savedKey = key;
       updateSaveButton(0);
     }, wait + (download ? DOWNLOAD_PAUSE : 0));
