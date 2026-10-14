@@ -2749,7 +2749,7 @@
     async function worker(){                                      // 8つずつ並べて読む（一度にたくさん読むと失敗しやすい）
       while(next < todo.length){
         const i = next++, f = todo[i];
-        got[i] = {name: f === "このゲームの素材について.txt" ? f : "game-assets/" + f, data: await get(f)};
+        got[i] = {name: "game-assets/" + f, data: await get(f)};   // 素材の説明（このゲームの素材について.txt）も game-assets の中
       }
     }
     await Promise.all([0, 1, 2, 3, 4, 5, 6, 7].map(worker));
