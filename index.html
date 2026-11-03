@@ -50,7 +50,7 @@
     inset:-40px;
     z-index:0;
     pointer-events:none;
-    background:url("image/top/bg_mv_01.png") center center / auto no-repeat;
+    background:url("image/top/bg_mv_01.png") center center / cover no-repeat;   /* 画面の大きさに合わせて広げ縮めする（1920より小さい画面でも全体が見える） */
     filter:blur(0);
     transition:filter .6s ease;
     will-change:filter;
@@ -347,13 +347,15 @@
     color:#fff;
   }
   /* 小さい行があるボタンは、ふりがなまで含めて緑の面（上から10〜86px）に収まるよう少し小さく */
-  .option .label:has(small) b{ font-size:32px; }
+  .option .label:has(small) b{ font-size:clamp(24px, calc(48px - 12px / var(--s)), 32px); }   /* 下の説明が大きくなった分だけ小さくして、緑の面に収める */
+  /* 小さい説明は、枠が縮んでも表示で12pxより小さくしない（いちばん長い14文字がボタンに収まるよう、枠の中で28pxまで）。
+     大きくなった分は、上の行（b）を小さくして緑の面に収める。すき間はつめない（ふりがなが上の行に重ならないように） */
   .option .label small{
     display:block;
     color:#fff;
-    font-size:16px;
+    font-size:clamp(16px, calc(12px / var(--s)), 28px);
     line-height:1;
-    margin-top:10px;
+    margin-top:max(10px, 0.65em);   /* ふりがな（文字の半分の高さ）が上の行に重ならないすき間 */
     font-weight:700;
     opacity:1;
   }
@@ -628,7 +630,7 @@
     padding:calc(150px * var(--s)) 20px calc(36px * var(--s));
     overflow:clip;   /* 紙ふぶきが画面の外へ出ても、ページが伸びないように */
   }
-  #s-end h1{ margin-bottom:8px; }
+  #s-end h1{ margin-bottom:8px; z-index:1; }
   #s-end .lede,
   #s-end textarea{ display:none; }
   /* 未回答があるときは、宝箱の絵のかわりに未回答の質問を出す */
@@ -695,7 +697,7 @@
     left:50%;
     top:52.2%;
     transform:translate(-50%, -50%);
-    z-index:1;   /* タイトルの板（z-index:2）より後ろ。宝箱の光がタイトルにかからないように */
+    z-index:3;   /* 宝箱と主人公は、題名の板（ここでは z-index:1）より前 */
     display:flex;
     align-items:center;
     justify-content:center;
@@ -714,11 +716,11 @@
     max-width:none;
     max-height:none;
   }
-  /* 宝箱を見つけた演出：はねて登場して、後ろで光の輪がゆっくり回る */
-  .end-chest-wrap::before{
-    content:"";
+  /* 宝箱を見つけた演出：はねて登場して、後ろで光の輪がゆっくり回る。
+     光の輪は題名の板より後ろに出すので、宝箱とは別に枠（.q-stage）に置く。--rx・--ry（宝箱の真ん中）は JS の placeEndLayers で入れる */
+  .end-rays{
     position:absolute;
-    left:50%; top:50%;
+    left:var(--rx, 50%); top:var(--ry, 50%);
     width:880px; height:880px;
     margin:-440px 0 0 -440px;
     z-index:0;
@@ -732,7 +734,8 @@
   #s-end.chest-reveal .end-chest{
     animation:chest-bounce .9s cubic-bezier(.3,1.4,.5,1) both;
   }
-  #s-end.chest-reveal .end-chest-wrap::before{
+  #s-end.has-missing .end-rays{ display:none; }
+  #s-end.chest-reveal .end-rays{
     animation:rays-in .6s ease-out .55s both, rays-spin 14s linear .55s infinite;
   }
   @keyframes chest-bounce{
@@ -768,27 +771,28 @@
     85%{ opacity:1; }
     100%{ transform:translate(-50%, -50%) translate(var(--x2), var(--y2)) rotate(var(--spin)); opacity:0; }
   }
-  /* 保存したとき：自分の主人公（自機・車）が宝箱から飛び出して、宝箱の上に着地する。
-     はじめは宝箱の後ろ（z-index:0）、いちばん高いところから前（z-index:2）に出る */
+  /* 保存したとき：自分の主人公（自機・車）が宝箱から真上に飛び出して、宝箱の真ん中の手前に着地する。
+     題名の板より上まで飛べるように、宝箱の中ではなく枠（.q-stage）に置く。
+     はじめは題名の板より前・宝箱の後ろ（z-index:2）、いちばん高いところから宝箱より前（z-index:4）に出る。
+     --hx・--hy（宝箱の真ん中・下はし）、--hh（主人公の高さ）、--jy（飛ぶ高さ）は JS の placeEndLayers で入れる。
+     上下の動きの % は主人公の高さに対して */
   .chest-hero{
     position:absolute;
-    left:50%; bottom:100%;
-    z-index:0;
-    height:170px;
+    left:var(--hx); top:var(--hy);
+    z-index:2;
+    height:var(--hh);
     width:auto;
-    margin-bottom:-14px;
     pointer-events:none;
     transform-origin:50% 100%;
     animation:hero-pop 1.1s linear both;
   }
-  .chest-hero.vehicle{ height:120px; margin-bottom:-6px; }
   @keyframes hero-pop{
-    0%{ transform:translate(-50%, 260px) scale(.6); z-index:0; animation-timing-function:cubic-bezier(.2,.8,.4,1); }
-    45%{ transform:translate(calc(-50% - 90px), -140px) scale(1); z-index:0; animation-timing-function:cubic-bezier(.6,0,.9,.5); }
-    46%{ z-index:2; }
-    80%{ transform:translate(calc(-50% - 150px), 0) scale(1.08, .9); z-index:2; }
-    90%{ transform:translate(calc(-50% - 150px), -18px) scale(.96, 1.04); z-index:2; }
-    100%{ transform:translate(calc(-50% - 150px), 0) scale(1); z-index:2; }
+    0%{ transform:translate(-50%, -100%) scale(.6); z-index:2; animation-timing-function:cubic-bezier(.2,.8,.4,1); }
+    45%{ transform:translate(-50%, calc(-100% - var(--jy))) scale(1); z-index:2; animation-timing-function:cubic-bezier(.6,0,.9,.5); }
+    46%{ z-index:4; }
+    80%{ transform:translate(-50%, -100%) scale(1.08, .9); z-index:4; }
+    90%{ transform:translate(-50%, -110%) scale(.96, 1.04); z-index:4; }
+    100%{ transform:translate(-50%, -100%) scale(1); z-index:4; }
   }
   /* 地図のふり返り：番号が1から順に光って、最後に宝箱の印が大きく光る */
   .dots span.dot-flash{
@@ -817,9 +821,9 @@
   }
   @media (prefers-reduced-motion: reduce){
     .chest-hero, .dots span.dot-flash{ animation:none; }
-    .chest-hero{ transform:translate(calc(-50% - 150px), 0); z-index:2; }
+    .chest-hero{ transform:translate(-50%, -100%); z-index:4; }
     #s-end.chest-reveal .end-chest{ animation:none; }
-    #s-end.chest-reveal .end-chest-wrap::before{ animation:none; opacity:1; }
+    #s-end.chest-reveal .end-rays{ animation:none; opacity:1; }
   }
   .end-actions{
     position:relative;
@@ -848,6 +852,77 @@
     0%{ transform:translate(-50%,-50%) scale(.4); opacity:1; }
     100%{ transform:translate(-50%,-90%) scale(1.35); opacity:0; }
   }
+
+  /* ---------- スマホ（縦向きで幅 760px 以下）----------
+     パソコンの枠（1430×810 の絵）を縮めると小さすぎるので、枠は CSS で描き、選択肢を1列に並べる。
+     --ms：上の番号の列と冒険記録の大きさ　--ts：題名の板の大きさ　--bs：スタートのボタンの大きさ（JS の applyScale で決める） */
+  body.is-phone .section{ padding:64px 12px 14px; }
+  /* 右の冒険記録のボタンと重ならないように、左に寄せる。いま選んでいる番号の絵はひとまわり大きく（左右に約30pxはみ出す）、画面から切れないように左右をあける */
+  /* 縦は、冒険記録のボタン（上から8px・高さ60px、中心は38px）と中心をそろえる。番号の列は高さ130px を --ms 倍にしたもの */
+  body.is-phone .map-path{ top:calc(38px - 65px * var(--ms)); left:var(--ml); transform:scale(var(--ms)); transform-origin:top left; }
+  body.is-phone #logpanel{ top:8px; right:8px; transform:scale(.5); }   /* 冒険記録のボタンは、番号の列の大きさにかかわらず同じ大きさ */
+  body.is-phone .q-stage{
+    width:100% !important;
+    height:100% !important;
+    transform:none;
+    margin:0;
+    background:#fde7d6;
+    border:6px solid #72cf1e;
+    border-radius:22px;
+    box-shadow:inset 0 0 0 5px #ffffff, 0 4px 0 rgba(30,110,0,.35);
+    overflow-x:hidden;
+    overflow-y:auto;
+  }
+  body.is-phone .qtitle, body.is-phone #s-end h1{
+    top:12px;
+    transform:translateX(-50%) scale(var(--ts));
+    transform-origin:top center;
+  }
+  body.is-phone .options,
+  body.is-phone .section[data-q="genre"] .options,
+  body.is-phone .options.two-cols{
+    position:relative;
+    left:auto; top:auto;
+    transform:none;
+    width:100%;
+    margin:calc(110px * var(--ts) + 26px) 0 12px;
+    padding:0 14px;
+    grid-template-columns:1fr;
+    gap:10px;
+  }
+  body.is-phone .option{
+    width:min(100%, 290px) !important;   /* 横に広がりすぎないように */
+    height:var(--ob) !important;   /* 選択肢が6つでも枠に収まる高さ（JS の applyScale で決める） */
+    background-size:100% 100%;
+  }
+  body.is-phone .option .label{ padding:0 10px 6px; }
+  body.is-phone .option .label b,
+  body.is-phone .option .label:has(small) b{ font-size:clamp(16px, calc(var(--ob) * 0.3), 21px); }
+  body.is-phone .option .label small{ font-size:clamp(11px, calc(var(--ob) * 0.18), 13px); margin-top:clamp(5px, calc(var(--ob) * 0.11), 8px); }
+  body.is-phone #s-start{ gap:18px; padding:20px 12px; }
+  body.is-phone .hero-logo{ width:min(92vw, 540px); height:auto; }
+  body.is-phone .btn-start{
+    transform:scale(var(--bs));
+    margin:0 calc(610px * (var(--bs) - 1) / 2) calc(158px * (var(--bs) - 1));
+  }
+  body.is-phone .end-found{
+    position:relative;
+    left:auto; top:auto;
+    transform:none;
+    flex-direction:column;
+    gap:10px;
+    margin:calc(110px * var(--ts) + 20px) auto 12px;
+    padding:0 14px;
+  }
+  /* 宝箱の画面はスクロールさせない。宝箱の絵の高さ --ch は JS の applyScale で決める */
+  body.is-phone #s-end .q-stage{ overflow:hidden; }
+  body.is-phone .end-chest{ width:auto; height:var(--ch); max-width:60vw; object-fit:contain; }
+  body.is-phone #s-end .btn-save{ transform:scale(var(--bt)); margin:calc(110px * (var(--bt) - 1) / 2) 0; }
+  body.is-phone #s-end .btn-home{ transform:scale(var(--bt)); margin:calc(74px * (var(--bt) - 1) / 2) 0; }
+  body.is-phone #saveNote{ position:static; transform:none; white-space:normal; max-width:calc(100vw - 80px); font-size:16px; margin-top:4px; }
+  body.is-phone #missing{ min-height:0; width:100%; padding:18px 14px; gap:14px; }
+  body.is-phone #missing .miss-lead{ font-size:18px; }
+  body.is-phone #missing .miss-chip{ font-size:16px; padding:14px 16px 9px; }
 
   ::-webkit-scrollbar{ width:8px; }
   ::-webkit-scrollbar-thumb{ background:var(--wood); border-radius:4px; }
@@ -1250,6 +1325,7 @@
   <section class="section" id="s-end">
     <h1 id="endTitle"><ruby>宝箱<rt>たからばこ</rt></ruby>を<ruby>見<rt>み</rt></ruby>つけたよ！</h1>
     <textarea id="preview" readonly spellcheck="false"></textarea>
+    <div class="end-rays"></div>
     <div class="end-found">
       <div class="end-chest-wrap"><img class="end-chest" src="image/contents/icon_takarabako.png" alt=""></div>
       <div id="missing"></div>
@@ -1766,6 +1842,7 @@
       endSec.classList.remove('chest-reveal');
       void endSec.offsetWidth;
       endSec.classList.add('chest-reveal');
+      placeEndLayers();
     }
   }
 
@@ -1783,20 +1860,20 @@
   }
 
   // 選んだ主人公の絵（シューティングは自機、レーシングは自分の車）。とび上がり中と着地後の2枚。
-  // 絵は game-assets からコピーした image/chest_pop を使う（このページだけで動くように）
+  // 絵は、ゲームに入れる素材と同じ game-assets のものを使う
   function heroPopImages(){
     const g = selectedGenre();
     if(g === "shooting" && answers["shooting-ship"] && answers["shooting-ship"].images){
-      const src = "image/chest_pop/ships/" + answers["shooting-ship"].images.ship;
+      const src = "game-assets/shooting/ships/" + answers["shooting-ship"].images.ship;
       return { jump:src, stand:src, vehicle:true };
     }
     if(g === "racing" && answers["racing-car"] && answers["racing-car"].images){
-      const src = "image/chest_pop/cars/" + answers["racing-car"].images.me;
+      const src = "game-assets/racing/cars/" + answers["racing-car"].images.me;
       return { jump:src, stand:src, vehicle:true };
     }
     if(answers.hero && answers.hero.images){
       const h = answers.hero.images.hero;
-      const base = "image/chest_pop/hero/" + h.dir + "/" + h.name;
+      const base = "game-assets/_common/hero/" + h.dir + "/" + h.name;
       return { jump:base + "_jump.png", stand:base + "_idle.png", vehicle:false };
     }
     return null;
@@ -1816,8 +1893,30 @@
     img.alt = '';
     img.src = imgs.jump;
     img.addEventListener('animationend', function(){ img.src = imgs.stand; });
-    wrap.appendChild(img);
+    wrap.closest('.q-stage').appendChild(img);
+    placeEndLayers();
     return true;
+  }
+
+  // 光の輪と主人公の位置・大きさを、今の宝箱に合わせる（画面の大きさが変わったときも）。
+  // どちらも枠（.q-stage）に置いている。枠はパソコンでは縮めて表示しているので、画面上の長さを枠の中の長さに直す
+  function placeEndLayers(){
+    const chest = document.querySelector('.end-chest'), rays = document.querySelector('.end-rays');
+    if(!chest || !rays) return;
+    const stage = rays.parentNode, sr = stage.getBoundingClientRect(), cr = chest.parentNode.getBoundingClientRect();   // 宝箱は登場のときに動くので、外の箱で計る
+    if(!sr.width || !cr.width) return;   // 宝箱の画面が出ていない
+    const k = stage.offsetWidth / sr.width;
+    const ch = chest.offsetHeight;
+    const cx = (cr.left + cr.width / 2 - sr.left) * k - stage.clientLeft, cy = (cr.top + cr.height / 2 - sr.top) * k - stage.clientTop;
+    rays.style.setProperty('--rx', cx + 'px');
+    rays.style.setProperty('--ry', cy + 'px');
+    const img = document.querySelector('.chest-hero');
+    if(!img) return;
+    const hy = cy + ch * 0.52, hh = ch * (img.classList.contains('vehicle') ? 0.4 : 0.7);
+    img.style.setProperty('--hx', cx + 'px');
+    img.style.setProperty('--hy', hy + 'px');
+    img.style.setProperty('--hh', hh + 'px');
+    img.style.setProperty('--jy', Math.max(0, Math.min(ch * 1.15, hy - hh - 10)) + 'px');   // 飛ぶ高さ：宝箱の上まで出る高さ。枠の上からはみ出さないところまで
   }
 
   function removeChestHero(){
@@ -2668,8 +2767,10 @@
   }
 
   let saving = false;
-  let savedKey = null;            // 保存したときの答え。同じ答えのままなら、もう保存しない
+  let savedKey = null;            // 保存したときの答え。答えが同じあいだは「保存したよ」を出しておく
+  let savedAt = 0;                // 最後にダウンロードした時刻
   const DOWNLOAD_PAUSE = 900;     // 演出が終わってから、ダウンロードするまでの間（ミリ秒）
+  const SAVE_COOLDOWN = 3000;     // ダウンロードしてからこの間（ミリ秒）は、押しても何もしない（連打で何個も保存しない）
 
   function answersKey(){
     return activeQuestionKeys().map(function(k){ return k + ':' + (answers[k] ? answers[k].value : ''); }).join('|');
@@ -2766,26 +2867,26 @@
 
   // 演出を見せてから、ゲームのもと.zip（AGENTS.md と素材）をダウンロードする。
   // 素材が読めないとき（パソコンの index.html を直接開いたときなど）は、AGENTS.md だけをダウンロードする
-  // 演出は押すたびに出す。ダウンロードは同じ答えでは1回だけ（答えを変えるか「次の冒険へ」でまたできる）
+  // 押すたびに、演出を出してダウンロードする。
+  // ダブルクリックや連打は、演出・ダウンロードのあいだと、ダウンロードしてから SAVE_COOLDOWN のあいだは受けつけない
   function createFile(){
-    if(saving) return;
+    if(saving || Date.now() - savedAt < SAVE_COOLDOWN) return;
     const {md, missing} = buildMarkdown();
     if(missing.length){ renderPreview(); return; }
     const key = answersKey();
-    const download = savedKey !== key;
     saving = true;
     const wait = playSaveEffects();
-    const zipping = download ? buildGameZip(md).catch(function(){ return null; }) : null;   // 演出のあいだに素材を集める
+    const zipping = buildGameZip(md).catch(function(){ return null; });   // 演出のあいだに素材を集める
     setTimeout(async function(){
-      if(!download){ saving = false; return; }
       const zip = await zipping;
-      saving = false;
       if(zip) downloadBlob(zip, ZIP_NAME);
       else downloadBlob(new Blob([md], {type:'text/markdown;charset=utf-8'}), 'AGENTS.md');
       setSaveNoteName(zip ? ZIP_NAME : 'AGENTS.md');
       savedKey = key;
+      savedAt = Date.now();
+      saving = false;
       updateSaveButton(0);
-    }, wait + (download ? DOWNLOAD_PAUSE : 0));
+    }, wait + DOWNLOAD_PAUSE);
   }
 
   function mountQuestionChrome(){
@@ -2855,17 +2956,51 @@
   }
 
   // フレーム（1430×810）＋上の地図（150px）＋下の余白（36px）が画面に収まるように縮める。大きくはしない
+  // スマホ（縦向きで幅 760px 以下）は、スマホ用の並べ方にして、上の番号の列・題名の板・ボタンの大きさを幅で決める
   function applyScale(){
-    const s = Math.min(1, (window.innerWidth - 40) / 1430, window.innerHeight / (150 + 810 + 36));
-    document.documentElement.style.setProperty('--s', Math.max(0.3, s).toFixed(4));
+    const w = window.innerWidth, h = window.innerHeight, root = document.documentElement.style;
+    const s = Math.min(1, (w - 40) / 1430, h / (150 + 810 + 36));
+    root.setProperty('--s', Math.max(0.3, s).toFixed(4));
+    const phone = w <= 760 && h >= w;
+    document.body.classList.toggle('is-phone', phone);
+    if(!phone) return;
+    const map = document.getElementById('mapPath');
+    const mapW = map ? map.offsetWidth : 900;
+    // 番号の列：左の画面のはしまでと、右の冒険記録のボタン（右から8px・幅60px）までのすき間を同じにする。
+    // すき間は、選んでいる番号のはみ出し（左右30pxずつ）＋8px より小さくしない
+    const ms = Math.min(0.5, (w - 84) / Math.max(1, mapW + 60));
+    const gap = Math.max(8 + 30 * ms, (w - 68 - mapW * ms) / 2);
+    root.setProperty('--ms', ms.toFixed(4));
+    root.setProperty('--ml', gap.toFixed(1) + 'px');
+    const ts = Math.min(0.7, (w - 60) / 535);
+    root.setProperty('--ts', ts.toFixed(4));
+    // 選択肢のボタンの高さ：画面の高さから、上の番号の列・枠・題名・すき間の分を引いて、6つで割る（44〜76px）
+    const room = h - 64 - 14 - 12 - (110 * ts + 26) - 12 - 5 * 10 - 8;
+    root.setProperty('--ob', Math.max(44, Math.min(76, room / 6)).toFixed(1) + 'px');
+    root.setProperty('--bs', Math.min(0.8, (w - 40) / 610).toFixed(4));
+    const bt = Math.min(0.85, (w - 70) / 452, (h - 330) / 340);
+    root.setProperty('--bt', bt.toFixed(4));   // 宝箱の画面のボタン。低い画面では高さでも小さくする
+    // 宝箱の絵の高さ：ふだんは幅で決める。題名・ボタン2つ・保存したよの文（約2行）・すき間を引いた残りに入らないときだけ小さくする
+    const rest = 205 + 110 * ts + 184 * bt;
+    root.setProperty('--ch', Math.max(64, Math.min(0.42 * w, 200, h - rest)).toFixed(1) + 'px');
   }
   let resizeTimer = 0;
   window.addEventListener('resize', function(){
     applyScale();
+    placeEndLayers();
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function(){ scrollToVisibleIndex(lastActiveIndex, 'auto'); }, 150);
   });
 
+  // 番号の列の幅が変わったら（質問が増えたときなど）、スマホでは大きさを合わせ直す
+  if(window.ResizeObserver && document.getElementById('mapPath')){
+    new ResizeObserver(function(){ if(document.body.classList.contains('is-phone')) applyScale(); }).observe(document.getElementById('mapPath'));
+  }
+  // 宝箱のまわりの大きさが変わったら（宝箱の絵が読みこまれた・未回答の表示が消えたなど）、光の輪と主人公を合わせ直す
+  if(window.ResizeObserver){
+    const endObserver = new ResizeObserver(function(){ placeEndLayers(); });
+    document.querySelectorAll('.end-found, .end-chest').forEach(function(el){ endObserver.observe(el); });
+  }
   applyScale();
   showRandomGenres();
   applyIcons();
